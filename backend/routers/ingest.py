@@ -14,16 +14,32 @@ def _date_range(days: int) -> tuple[str, str]:
     )
 
 
+def _date_range_hours(hours: int) -> tuple[str, str]:
+    now = datetime.utcnow()
+    return (
+        (now - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+        now.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+    )
+
+
 @router.get("/top-sources")
-async def get_top_sources(days: int = Query(7, ge=1, le=90)):
+async def get_top_sources(
+    days: int = Query(None, ge=1, le=90),
+    hours: int = Query(None, ge=1, le=24),
+):
     """Top log sources by event count over the given period."""
-    from_dt, to_dt = _date_range(days)
+    if hours is not None:
+        from_dt, to_dt = _date_range_hours(hours)
+        period_label = f"{hours}h"
+    else:
+        from_dt, to_dt = _date_range(days or 7)
+        period_label = f"{days or 7}d"
     query = "| group events=count() by dataSource.name | sort -events | limit 25"
     try:
         result = await s1_client.run_powerquery(query, from_dt, to_dt)
     except Exception as e:
         raise HTTPException(502, f"PowerQuery error: {e}")
-    return {"period_days": days, "data": result.get("events", [])}
+    return {"period": period_label, "data": result.get("events", [])}
 
 
 @router.get("/by-event-type")

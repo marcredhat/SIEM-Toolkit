@@ -77,6 +77,13 @@ function barChart(rows, labelKey, valueKey) {
   const chartH = H - padT - padB
   const bw = Math.max(8, Math.floor(chartW / rows.length) - 4)
 
+  const defs = `<defs>
+    <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#c084fc"/>
+      <stop offset="100%" stop-color="#6d28d9"/>
+    </linearGradient>
+  </defs>`
+
   // Y-axis ticks (4 lines)
   const ticks = [0, 0.25, 0.5, 0.75, 1].map(t => {
     const val = Math.round(max * t)
@@ -95,12 +102,12 @@ function barChart(rows, labelKey, valueKey) {
     const lbl = esc(String(r[labelKey] || '').slice(5, 10))
     // value label on top of bar
     const valLbl = val >= 1000 ? (val/1000).toFixed(1)+'k' : val
-    return `<rect x="${x}" y="${y}" width="${bw}" height="${bh}" fill="#7c3aed" rx="2"/>
-            <text x="${x + bw/2}" y="${y - 4}" text-anchor="middle" fill="#a78bfa" font-size="9" font-weight="500">${valLbl}</text>
+    return `<rect x="${x}" y="${y}" width="${bw}" height="${bh}" fill="url(#barGrad)" rx="2"/>
+            <text x="${x + bw/2}" y="${y - 4}" text-anchor="middle" fill="#c084fc" font-size="9" font-weight="500">${valLbl}</text>
             <text x="${x + bw/2}" y="${H - 6}" text-anchor="middle" fill="#6b7280" font-size="9">${lbl}</text>`
   }).join('')
 
-  return `<svg viewBox="0 0 ${W} ${H}" class="w-full">${ticks}${bars}</svg>`
+  return `<svg viewBox="0 0 ${W} ${H}" class="w-full">${defs}${ticks}${bars}</svg>`
 }
 
 // ── Home ──────────────────────────────────────────────────────────────────
@@ -260,6 +267,16 @@ function cvSetFilter(f) {
 
   const sources = cvData.sources.filter(s => f === 'all' || s.status === f)
 
+  function parserCell(s) {
+    if (s.status === 'covered') {
+      return `<span class="text-gray-400">${esc(s.parser)} <span class="text-gray-600">(${s.parser_fields} fields)</span></span>`
+    }
+    if (s.parser && s.format_type && s.format_type !== 'custom') {
+      return `<span class="text-amber-400 italic">⚠ ${esc(s.parser)} <span class="text-amber-600">(${esc(s.format_type)} — needs custom parser)</span></span>`
+    }
+    return `<span class="text-red-400 italic">⚠ No parser loaded</span>`
+  }
+
   document.getElementById('cv-table').innerHTML = sources.length === 0
     ? '<p class="text-gray-600 text-sm">No sources match this filter.</p>'
     : `<div class="overflow-x-auto"><table class="w-full text-sm">
@@ -275,9 +292,7 @@ function cvSetFilter(f) {
             <td class="py-2 pr-4 font-mono text-xs text-gray-200">${esc(s.source_name)}</td>
             <td class="py-2 pr-4 text-xs text-gray-400">${(s.event_count||0).toLocaleString()}</td>
             <td class="py-2 pr-4"><span class="px-2 py-0.5 rounded text-xs border ${STYLES[s.status]||''}">${LABELS[s.status]||s.status}</span></td>
-            <td class="py-2 pr-4 text-xs ${s.status === 'parser_needed' ? 'text-amber-400 italic' : 'text-gray-400'}">
-              ${s.status === 'parser_needed' ? '⚠ No parser loaded' : esc(s.parser) + ' (' + s.parser_fields + ' fields)'}
-            </td>
+            <td class="py-2 pr-4 text-xs">${parserCell(s)}</td>
             <td class="py-2 text-xs text-gray-400">${s.rules?.length ? s.rules.map(r=>esc(r.rule)).join(', ') : '—'}</td>
           </tr>`).join('')}
         </tbody></table></div>`
@@ -286,8 +301,13 @@ function cvSetFilter(f) {
 // ── Ingest ────────────────────────────────────────────────────────────────
 
 let igDays = 3
+let igHours = null  // null = days mode, number = hours mode
 
 function renderIngest() {
+  const btns = [
+    {label:'1h', onclick:"igSetHours(1)", id:'ig-h1'},
+    ...([3,5,7].map(d => ({label:`${d}d`, onclick:`igSetDays(${d})`, id:`ig-d${d}`})))
+  ]
   set(`<div class="p-8 max-w-6xl">
     <div class="flex items-center justify-between mb-6">
       <div>
@@ -295,8 +315,8 @@ function renderIngest() {
         <p class="text-sm text-gray-400 mt-1">Event volume · cost projection · filter simulator</p>
       </div>
       <div class="flex gap-2">
-        ${[3,5,7].map(d=>`<button onclick="igSetDays(${d})" id="ig-d${d}"
-          class="px-3 py-1.5 text-xs rounded-lg border border-gray-700 text-gray-400 hover:border-gray-500">${d}d</button>`).join('')}
+        ${btns.map(b=>`<button onclick="${b.onclick}" id="${b.id}"
+          class="px-3 py-1.5 text-xs rounded-lg border border-gray-700 text-gray-400 hover:border-gray-500">${b.label}</button>`).join('')}
       </div>
     </div>
     <div id="ig-err"></div>
@@ -340,15 +360,28 @@ function renderIngest() {
       <div id="ig-sim-result"></div>
     </div>
   </div>`)
-  igSetDays(igDays)
+  igUpdateButtons()
+  igLoad()
+}
+
+function igUpdateButtons() {
+  const active = igHours ? `ig-h${igHours}` : `ig-d${igDays}`
+  ;[{id:'ig-h1'},{id:'ig-d3'},{id:'ig-d5'},{id:'ig-d7'}].forEach(({id}) => {
+    const b = document.getElementById(id)
+    if (!b) return
+    b.className = `px-3 py-1.5 text-xs rounded-lg border transition-colors ${id===active ? 'bg-purple-700 border-purple-600 text-white' : 'border-gray-700 text-gray-400 hover:border-gray-500'}`
+  })
 }
 
 function igSetDays(d) {
-  igDays = d
-  ;[3,5,7].forEach(n => {
-    const b = document.getElementById(`ig-d${n}`)
-    if (b) b.className = `px-3 py-1.5 text-xs rounded-lg border transition-colors ${n===d ? 'bg-purple-700 border-purple-600 text-white' : 'border-gray-700 text-gray-400 hover:border-gray-500'}`
-  })
+  igDays = d; igHours = null
+  igUpdateButtons()
+  igLoad()
+}
+
+function igSetHours(h) {
+  igHours = h
+  igUpdateButtons()
   igLoad()
 }
 
@@ -357,13 +390,19 @@ async function igLoad() {
   document.getElementById('ig-chart').innerHTML = spinner
   document.getElementById('ig-sources').innerHTML = spinner
 
+  const sourcesUrl = igHours
+    ? `/api/ingest/top-sources?hours=${igHours}`
+    : `/api/ingest/top-sources?days=${igDays}`
+
   const [dailyResult, sourcesResult] = await Promise.allSettled([
-    apiGet(`/api/ingest/daily-volume?days=${igDays}`),
-    apiGet(`/api/ingest/top-sources?days=${igDays}`)
+    igHours ? Promise.resolve(null) : apiGet(`/api/ingest/daily-volume?days=${igDays}`),
+    apiGet(sourcesUrl)
   ])
 
   // Daily volume chart
-  if (dailyResult.status === 'fulfilled') {
+  if (igHours) {
+    document.getElementById('ig-chart').innerHTML = `<p class="text-gray-500 text-sm italic">Daily volume chart not available for 1h view — see Top Sources below for breakdown by source.</p>`
+  } else if (dailyResult.status === 'fulfilled') {
     document.getElementById('ig-chart').innerHTML = barChart(dailyResult.value, 'date', 'events')
   } else {
     document.getElementById('ig-chart').innerHTML = `<p class="text-red-400 text-sm">${esc(dailyResult.reason?.message ?? 'Error')}</p>`
