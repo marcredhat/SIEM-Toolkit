@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from db import engine, Base
-from routers import coverage, ingest
+from routers import coverage, ingest, settings
 
 Base.metadata.create_all(bind=engine)
 
@@ -16,7 +16,8 @@ app.add_middleware(
 )
 
 app.include_router(coverage.router, prefix="/api/coverage", tags=["Coverage"])
-app.include_router(ingest.router, prefix="/api/ingest", tags=["Ingest"])
+app.include_router(ingest.router,   prefix="/api/ingest",   tags=["Ingest"])
+app.include_router(settings.router, prefix="/api/settings", tags=["Settings"])
 
 
 @app.get("/health")

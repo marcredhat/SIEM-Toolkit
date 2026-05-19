@@ -22,6 +22,12 @@
       <a href="#/ingest" data-page="ingest"   class="nav-link flex items-center px-3 py-2 rounded-lg text-sm cursor-pointer">Ingest Dashboard</a>
       <a href="#/onboarding" data-page="onboarding" class="nav-link flex items-center px-3 py-2 rounded-lg text-sm cursor-pointer">Onboarding</a>
     </nav>
+    <div class="p-3 border-t border-gray-800">
+      <a href="#/settings" data-page="settings" class="nav-link flex items-center gap-2 px-3 py-2 rounded-lg text-sm cursor-pointer text-gray-400 hover:bg-gray-800 hover:text-gray-100 transition-colors">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>
+        Settings
+      </a>
+    </div>
   </aside>
 
   <main class="flex-1 overflow-auto" id="main"></main>
@@ -395,6 +401,114 @@ function obCopy() {
   if (b) { b.textContent = 'Copied!'; setTimeout(() => b.textContent = 'Copy', 1500) }
 }
 
+// ── Settings ──────────────────────────────────────────────────────────────
+
+async function renderSettings() {
+  set(`<div class="p-6 max-w-2xl mx-auto space-y-6">
+    <h1 class="text-xl font-bold text-white">Settings</h1>
+    <div id="st-content"><p class="text-gray-500 text-sm">Loading…</p></div>
+  </div>`)
+  try {
+    const { fields, env_file_exists, env_file_path } = await apiGet('/api/settings/config')
+    renderSettingsForm(fields, env_file_exists, env_file_path)
+  } catch(e) {
+    document.getElementById('st-content').innerHTML = `<p class="text-red-400 text-sm">${esc(e.message)}</p>`
+  }
+}
+
+function renderSettingsForm(fields, envExists, envPath) {
+  const setupBanner = !envExists ? `
+    <div class="bg-blue-950/60 border border-blue-700/50 rounded-lg p-4 text-sm mb-4">
+      <p class="font-semibold text-blue-300 mb-2">⚡ First-time setup</p>
+      <p class="text-blue-200/80 mb-3">No <code class="bg-gray-900 px-1 rounded">.env</code> file found. Create one from the template to get started:</p>
+      <div class="bg-gray-900 rounded p-3 font-mono text-xs text-green-300 space-y-1">
+        <div><span class="text-gray-500"># in your project directory:</span></div>
+        <div>cp .env.example .env</div>
+        <div><span class="text-gray-500"># edit .env with your credentials, then:</span></div>
+        <div>docker-compose up -d --build</div>
+      </div>
+    </div>` : ''
+
+  const fieldRows = fields.map(f => `
+    <div class="space-y-1">
+      <label class="block text-xs font-medium text-gray-400 uppercase tracking-wide">${esc(f.label)}</label>
+      <div class="flex gap-2">
+        <input
+          id="st-${f.key}"
+          type="${f.secret ? 'password' : 'text'}"
+          placeholder="${esc(f.value || f.placeholder)}"
+          value=""
+          data-key="${f.key}"
+          data-secret="${f.secret}"
+          class="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-purple-500 font-${f.secret ? 'mono' : 'sans'}"
+        >
+        ${f.secret ? `<button onclick="toggleSecret('st-${f.key}')" class="px-3 py-2 rounded-lg border border-gray-700 text-gray-400 hover:text-gray-100 text-xs hover:border-gray-500 transition-colors">Show</button>` : ''}
+      </div>
+      ${f.set ? `<p class="text-xs text-gray-600">Currently set${f.secret ? ' (masked)' : ': ' + esc(f.value)}</p>` : `<p class="text-xs text-amber-600">Not configured</p>`}
+    </div>`).join('')
+
+  document.getElementById('st-content').innerHTML = `
+    ${setupBanner}
+
+    <div class="bg-gray-900/50 border border-gray-800 rounded-lg p-5 space-y-5">
+      <div class="flex items-center justify-between">
+        <h2 class="font-semibold text-white text-sm">Environment Configuration</h2>
+        <span class="text-xs text-gray-500 font-mono">${esc(envPath)}</span>
+      </div>
+      <p class="text-xs text-gray-500">Leave a field blank to keep its current value. Changes are written to <code class="bg-gray-800 px-1 rounded">.env</code> and take effect after restarting the backend (<code class="bg-gray-800 px-1 rounded">docker-compose up -d --build backend</code>).</p>
+      <div class="space-y-4">${fieldRows}</div>
+      <div class="flex items-center gap-3 pt-2">
+        <button onclick="saveSettings()" id="st-save" class="px-4 py-2 bg-purple-700 hover:bg-purple-600 rounded-lg text-sm font-medium text-white transition-colors">Save to .env</button>
+        <span id="st-msg" class="text-sm"></span>
+      </div>
+    </div>
+
+    <div class="bg-gray-900/50 border border-gray-800 rounded-lg p-5 space-y-3">
+      <h2 class="font-semibold text-white text-sm">Manual Setup</h2>
+      <p class="text-xs text-gray-400">Prefer editing the file directly? Copy the template and fill in your credentials:</p>
+      <div class="bg-gray-950 rounded-lg p-4 font-mono text-xs text-gray-300 space-y-1">
+        <div><span class="text-gray-600"># 1. Copy the template</span></div>
+        <div class="text-green-400">cp .env.example .env</div>
+        <div class="mt-2"><span class="text-gray-600"># 2. Open and edit</span></div>
+        <div class="text-green-400">nano .env</div>
+        <div class="mt-2"><span class="text-gray-600"># 3. Rebuild & restart</span></div>
+        <div class="text-green-400">docker-compose up -d --build</div>
+      </div>
+      <div class="pt-1 space-y-1 text-xs text-gray-500">
+        <p><span class="text-gray-400 font-medium">S1_BASE_URL / S1_API_TOKEN</span> — SentinelOne console URL and service user API token. Generate the token at <span class="text-gray-400">Settings → Users → Service Users</span>.</p>
+        <p><span class="text-gray-400 font-medium">SDL_XDR_URL / SDL_LOG_READ_KEY</span> — Singularity Data Lake credentials for PowerQuery. Found at <span class="text-gray-400">Settings → Integrations → Data Lake API Keys</span>.</p>
+        <p><span class="text-gray-400 font-medium">ANTHROPIC_API_KEY</span> — Optional. Required only for the Onboarding AI assistant. Get it at <span class="text-gray-400">console.anthropic.com</span>.</p>
+      </div>
+    </div>`
+}
+
+function toggleSecret(id) {
+  const el = document.getElementById(id)
+  const btn = el.nextElementSibling
+  if (el.type === 'password') { el.type = 'text';  btn.textContent = 'Hide' }
+  else                        { el.type = 'password'; btn.textContent = 'Show' }
+}
+
+async function saveSettings() {
+  const updates = {}
+  document.querySelectorAll('[data-key]').forEach(el => {
+    if (el.value.trim()) updates[el.dataset.key] = el.value.trim()
+  })
+  if (!Object.keys(updates).length) {
+    document.getElementById('st-msg').innerHTML = '<span class="text-gray-400">Nothing to save — fill in at least one field.</span>'
+    return
+  }
+  setBtn('st-save', true)
+  try {
+    const r = await apiPost('/api/settings/config', { updates })
+    document.getElementById('st-msg').innerHTML =
+      `<span class="text-green-400">✓ Saved ${r.saved.length} value${r.saved.length!==1?'s':''}. Restart the backend to apply: <code class="bg-gray-800 px-1 rounded text-xs">docker-compose up -d --build backend</code></span>`
+    document.querySelectorAll('[data-key]').forEach(el => el.value = '')
+  } catch(e) {
+    document.getElementById('st-msg').innerHTML = `<span class="text-red-400">${esc(e.message)}</span>`
+  } finally { setBtn('st-save', false, 'Save to .env') }
+}
+
 // ── Router ────────────────────────────────────────────────────────────────
 
 function set(html) { document.getElementById('main').innerHTML = html }
@@ -411,6 +525,7 @@ function route() {
   if      (h === '#/coverage')   { updateNav('coverage');   renderCoverage()   }
   else if (h === '#/ingest')     { updateNav('ingest');     renderIngest()     }
   else if (h === '#/onboarding') { updateNav('onboarding'); renderOnboarding() }
+  else if (h === '#/settings')   { updateNav('settings');   renderSettings()   }
   else                           { updateNav('home');       renderHome()       }
 }
 
