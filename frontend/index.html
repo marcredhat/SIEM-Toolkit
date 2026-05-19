@@ -657,8 +657,9 @@ function renderQuality() {
       <h2 class="text-sm font-semibold text-white mb-1">Live Event Sampler</h2>
       <p class="text-xs text-gray-500 mb-4">Pull recent raw events from a source and see exactly which fields landed — and which are missing.</p>
       <div class="flex gap-3 flex-wrap mb-4">
-        <input id="qs-source" placeholder="dataSource.name — e.g. Palo Alto Networks Firewall"
-          class="flex-1 min-w-60 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-purple-600">
+        <select id="qs-source" class="flex-1 min-w-60 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-purple-600">
+          <option value="">— loading sources… —</option>
+        </select>
         <select id="qs-hours" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-purple-600">
           <option value="1">Last 1h</option>
           <option value="6">Last 6h</option>
@@ -681,8 +682,9 @@ function renderQuality() {
       <h2 class="text-sm font-semibold text-white mb-1">Field Population Rate</h2>
       <p class="text-xs text-gray-500 mb-4">Sample up to 500 events and measure what % have each key field populated. Low rates flag parser extraction failures.</p>
       <div class="flex gap-3 flex-wrap mb-3">
-        <input id="qp-source" placeholder="dataSource.name"
-          class="flex-1 min-w-60 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-purple-600">
+        <select id="qp-source" class="flex-1 min-w-60 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-purple-600">
+          <option value="">— loading sources… —</option>
+        </select>
         <select id="qp-hours" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-purple-600">
           <option value="1">Last 1h</option>
           <option value="6">Last 6h</option>
@@ -722,8 +724,8 @@ function renderQuality() {
 // ── Live Event Sampler ─────────────────────────────────────────────────────
 
 async function qsSample() {
-  const source = document.getElementById('qs-source').value.trim()
-  if (!source) { document.getElementById('qs-result').innerHTML = errBox('Enter a source name.'); return }
+  const source = document.getElementById('qs-source').value
+  if (!source) { document.getElementById('qs-result').innerHTML = errBox('Select a source.'); return }
   setBtn('btn-qs', true)
   document.getElementById('qs-result').innerHTML = '<p class="text-gray-500 text-sm animate-pulse">Querying data lake…</p>'
   try {
@@ -763,8 +765,8 @@ async function qsSample() {
 // ── Field Population Rate ──────────────────────────────────────────────────
 
 async function qpAnalyze() {
-  const source = document.getElementById('qp-source').value.trim()
-  if (!source) { document.getElementById('qp-result').innerHTML = errBox('Enter a source name.'); return }
+  const source = document.getElementById('qp-source').value
+  if (!source) { document.getElementById('qp-result').innerHTML = errBox('Select a source.'); return }
   setBtn('btn-qp', true)
   document.getElementById('qp-result').innerHTML = '<p class="text-gray-500 text-sm animate-pulse">Sampling events…</p>'
   try {
@@ -816,13 +818,35 @@ async function qpAnalyze() {
 async function qtLoadParsers() {
   try {
     const r = await apiGet('/api/coverage/map')
-    const names = [...new Set((r.sources || []).map(s => s.parser).filter(Boolean))].sort()
-    const sel = document.getElementById('qt-parser')
-    if (!sel) return
-    names.forEach(n => {
-      const o = document.createElement('option'); o.value = n; o.textContent = n; sel.appendChild(o)
-    })
-  } catch {}
+    const sources = (r.sources || []).sort((a, b) => b.event_count - a.event_count)
+    const parserNames = [...new Set(sources.map(s => s.parser).filter(p => p && p !== 'detected in data'))].sort()
+
+    // Populate source dropdowns
+    const sourcePlaceholder = '<option value="">— select a source —</option>'
+    const sourceOptions = sources.map(s =>
+      `<option value="${esc(s.source_name)}">${esc(s.source_name)} (${(s.event_count||0).toLocaleString()} events)</option>`
+    ).join('')
+
+    const qsSel = document.getElementById('qs-source')
+    const qpSel = document.getElementById('qp-source')
+    if (qsSel) qsSel.innerHTML = sourcePlaceholder + sourceOptions
+    if (qpSel) qpSel.innerHTML = sourcePlaceholder + sourceOptions
+
+    // Populate parser dropdown
+    const qtSel = document.getElementById('qt-parser')
+    if (qtSel) {
+      parserNames.forEach(n => {
+        const o = document.createElement('option'); o.value = n; o.textContent = n; qtSel.appendChild(o)
+      })
+    }
+  } catch(e) {
+    // If no sources synced yet, fall back to empty state with hint
+    const hint = '<option value="">— sync sources on Coverage Map first —</option>'
+    const qsSel = document.getElementById('qs-source')
+    const qpSel = document.getElementById('qp-source')
+    if (qsSel) qsSel.innerHTML = hint
+    if (qpSel) qpSel.innerHTML = hint
+  }
 }
 
 async function qtTest() {
