@@ -98,8 +98,9 @@ function barChart(rows, labelKey, valueKey) {
     const bh = Math.max(2, Math.floor((val / max) * chartH))
     const x = padL + i * (chartW / rows.length) + (chartW / rows.length - bw) / 2
     const y = padT + chartH - bh
-    // date label: show MM/DD
-    const lbl = esc(String(r[labelKey] || '').slice(5, 10))
+    // If label looks like a date (YYYY-MM-DD), show MM/DD; otherwise truncate to 10 chars
+    const rawLbl = String(r[labelKey] || '')
+    const lbl = esc(/^\d{4}-\d{2}-\d{2}$/.test(rawLbl) ? rawLbl.slice(5, 10) : rawLbl.slice(0, 10))
     // value label on top of bar
     const valLbl = val >= 1000 ? (val/1000).toFixed(1)+'k' : val
     return `<rect x="${x}" y="${y}" width="${bw}" height="${bh}" fill="url(#barGrad)" rx="2"/>
@@ -322,8 +323,8 @@ function renderIngest() {
     <div id="ig-err"></div>
     <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-5">
       <div class="flex items-baseline gap-2 mb-4">
-        <h2 class="text-sm font-medium text-gray-300">Daily Event Volume</h2>
-        <span class="text-xs text-gray-600">events ingested per day</span>
+        <h2 class="text-sm font-medium text-gray-300" id="ig-chart-title">Daily Event Volume</h2>
+        <span class="text-xs text-gray-600" id="ig-chart-sub">events ingested per day</span>
       </div>
       <div id="ig-chart"><p class="text-gray-600 text-sm">Loading…</p></div>
     </div>
@@ -399,9 +400,27 @@ async function igLoad() {
     apiGet(sourcesUrl)
   ])
 
-  // Daily volume chart
+  // Update chart title based on mode
+  const titleEl = document.getElementById('ig-chart-title')
+  const subEl   = document.getElementById('ig-chart-sub')
+  if (titleEl) titleEl.textContent = igHours ? 'Events by Source (Last 1h)' : 'Daily Event Volume'
+  if (subEl)   subEl.textContent   = igHours ? 'top sources · last hour'    : 'events ingested per day'
+
+  // Volume chart
   if (igHours) {
-    document.getElementById('ig-chart').innerHTML = `<p class="text-gray-500 text-sm italic">Daily volume chart not available for 1h view — see Top Sources below for breakdown by source.</p>`
+    // For 1h mode, render top-sources data as a by-source bar chart
+    if (sourcesResult.status === 'fulfilled') {
+      const data = sourcesResult.value?.data ?? []
+      const chartRows = data.slice(0, 12).map(r => ({
+        label: r['dataSource.name'] || r.name || 'unknown',
+        events: r.events || 0
+      }))
+      document.getElementById('ig-chart').innerHTML = chartRows.length
+        ? barChart(chartRows, 'label', 'events')
+        : `<p class="text-gray-500 text-sm">No data in this period.</p>`
+    } else {
+      document.getElementById('ig-chart').innerHTML = `<p class="text-red-400 text-sm">${esc(sourcesResult.reason?.message ?? 'Error')}</p>`
+    }
   } else if (dailyResult.status === 'fulfilled') {
     document.getElementById('ig-chart').innerHTML = barChart(dailyResult.value, 'date', 'events')
   } else {
