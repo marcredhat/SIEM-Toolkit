@@ -36,6 +36,7 @@ class ActiveSource(Base):
     source_name = Column(String, unique=True, index=True)
     event_count = Column(Integer, default=0)
     synced_at = Column(DateTime, default=datetime.utcnow)
+    parser_detected = Column(Integer, default=0)  # >0 means parsed events seen in data lake
 
 
 class IngestSnapshot(Base):

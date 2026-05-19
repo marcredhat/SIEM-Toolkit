@@ -272,7 +272,11 @@ function cvSetFilter(f) {
 
   function parserCell(s) {
     if (s.status === 'covered') {
-      return `<span class="text-gray-400">${esc(s.parser)} <span class="text-gray-600">(${s.parser_fields} fields)</span></span>`
+      if (s.parser === 'detected in data') {
+        return `<span class="text-emerald-400">✓ Parsed <span class="text-emerald-700">(${(s.parser_detected||0).toLocaleString()} typed events detected)</span></span>`
+      }
+      const detail = s.parser_fields ? ` (${s.parser_fields} fields)` : ''
+      return `<span class="text-gray-400">${esc(s.parser)}${detail}</span>`
     }
     if (s.parser && s.format_type && s.format_type !== 'custom') {
       return `<span class="text-amber-400 italic">⚠ ${esc(s.parser)} <span class="text-amber-600">(${esc(s.format_type)} — needs custom parser)</span></span>`
