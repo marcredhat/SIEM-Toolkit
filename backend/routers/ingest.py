@@ -90,6 +90,8 @@ async def simulate_filter(rule: FilterRule):
     """Estimate how many events and GB would be eliminated by an exclusion filter."""
     from_dt, to_dt = _date_range(rule.days)
 
+    # Build a valid base expression. SDL PowerQuery REQUIRES the query to
+    # start with a filter/source clause — it cannot start with a leading `|`.
     clauses = []
     if rule.source:
         clauses.append(f"dataSource.name=='{rule.source}'")
@@ -97,16 +99,26 @@ async def simulate_filter(rule: FilterRule):
         clauses.append(f"event.type=='{rule.event_type}'")
 
     if clauses:
-        filter_expr = " and ".join(clauses)
-        query = f"| filter {filter_expr} | group events=count()"
+        base_expr = " and ".join(clauses)
     else:
-        query = "| group events=count()"
+        # No filter specified — match every event so the simulator can show
+        # the total volume baseline.
+        base_expr = "dataSource.name!=''"
+
+    query = f"{base_expr} | group events=count()"
 
     try:
         result = await s1_client.run_powerquery(query, from_dt, to_dt)
-        events = (result.get("events") or [{}])[0].get("events", 0) if isinstance(result.get("events"), list) else 0
     except Exception as e:
-        raise HTTPException(502, f"PowerQuery error: {e}")
+        msg = str(e) or repr(e) or e.__class__.__name__
+        raise HTTPException(502, f"PowerQuery error ({query!r}): {msg}")
+
+    # run_powerquery returns errors via a dict — surface those too.
+    if result.get("error"):
+        raise HTTPException(502, f"PowerQuery error ({query!r}): {result['error']}")
+
+    rows = result.get("events") or []
+    events = rows[0].get("events", 0) if rows and isinstance(rows[0], dict) else 0
 
     estimated_gb = round(events / 1_000_000 * rule.gb_per_million_events, 3)
     monthly_events = int(events / rule.days * 30)

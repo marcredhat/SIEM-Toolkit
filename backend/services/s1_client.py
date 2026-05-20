@@ -11,6 +11,12 @@ TOKEN = os.environ.get("S1_API_TOKEN", "")
 SDL_XDR_URL = os.environ.get("SDL_XDR_URL", "https://xdr.us1.sentinelone.net").rstrip("/")
 SDL_LOG_READ_KEY = os.environ.get("SDL_LOG_READ_KEY", "")
 
+# PowerQuery timeout (seconds). Grouped queries on busy tenants can take
+# 2-5 minutes; default 600s, override via SDL_PQ_TIMEOUT env.
+SDL_PQ_TIMEOUT = float(os.environ.get("SDL_PQ_TIMEOUT", "600"))
+# How many times to retry on a ReadTimeout. Default 1 (so a single retry).
+SDL_PQ_TIMEOUT_RETRIES = int(os.environ.get("SDL_PQ_TIMEOUT_RETRIES", "1"))
+
 # Management Console API uses ApiToken auth
 HEADERS = {
     "Authorization": f"ApiToken {TOKEN}",
@@ -112,8 +118,11 @@ async def run_powerquery(query: str, from_date: str, to_date: str) -> dict:
         "maxCount": 1000,
     }
 
-    async with httpx.AsyncClient(timeout=120) as client:
-        for attempt in range(3):
+    timeout_cfg = httpx.Timeout(SDL_PQ_TIMEOUT, connect=15.0)
+    max_attempts = 3 + SDL_PQ_TIMEOUT_RETRIES  # 3 for 429 retries + N for ReadTimeout
+    async with httpx.AsyncClient(timeout=timeout_cfg) as client:
+        last_err: Exception | None = None
+        for attempt in range(max_attempts):
             try:
                 resp = await client.post(
                     f"{SDL_XDR_URL}/api/powerQuery",
@@ -125,16 +134,40 @@ async def run_powerquery(query: str, from_date: str, to_date: str) -> dict:
                 if e.response.status_code == 429 and attempt < 2:
                     await asyncio.sleep(10 * (attempt + 1))
                     continue
+                body = (e.response.text or "<empty body>")[:500]
                 raise RuntimeError(
-                    f"HTTP {e.response.status_code} from {e.request.url}: {e.response.text[:500]}"
+                    f"HTTP {e.response.status_code} from {e.request.url}: {body}"
+                ) from e
+            except httpx.ReadTimeout as e:
+                last_err = e
+                if attempt < max_attempts - 1:
+                    await asyncio.sleep(2 * (attempt + 1))
+                    continue
+                raise RuntimeError(
+                    f"ReadTimeout after {SDL_PQ_TIMEOUT}s talking to "
+                    f"{SDL_XDR_URL}/api/powerQuery (attempts={attempt + 1}). "
+                    f"Try a shorter time window or raise SDL_PQ_TIMEOUT in .env. "
+                    f"Query was: {query[:200]}"
+                ) from e
+            except httpx.RequestError as e:
+                raise RuntimeError(
+                    f"network error talking to {SDL_XDR_URL}/api/powerQuery: "
+                    f"{type(e).__name__}: {e or 'no detail'}"
                 ) from e
 
-        data = resp.json()
+        try:
+            data = resp.json()
+        except Exception as e:
+            return {"events": [], "error":
+                    f"non-JSON response (HTTP {resp.status_code}): "
+                    f"{(resp.text or '<empty>')[:400]}"}
+
         status = data.get("status", "")
 
         if status != "success":
-            # Return full response as error detail for debugging
-            return {"events": [], "error": f"PowerQuery status={status}: {str(data)[:400]}"}
+            # Surface the full response so callers can show a real error.
+            return {"events": [], "error":
+                    f"PowerQuery status={status or '<missing>'}: {str(data)[:400]}"}
 
         # Scalyr PowerQuery returns: {"status":"success","columns":[{"name":"..."},...], "values":[[...],...],...}
         raw_cols = data.get("columns", [])
