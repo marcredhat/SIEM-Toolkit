@@ -565,13 +565,6 @@ async def sync_sources(days: int = 7, db: Session = Depends(get_db)):
         if name:
             parsed_by_source[name] = row.get("parsed", 0)
 
-    # Preserve existing parser_detected values so a source once confirmed as
-    # parsed never loses its "Covered" status due to a sampling gap or timeout.
-    existing_detected: dict[str, int] = {
-        s.source_name: (s.parser_detected or 0)
-        for s in db.query(ActiveSource).all()
-    }
-
     rows = volume_result.get("events", [])
     db.query(ActiveSource).delete()
     synced_at = datetime.utcnow()
@@ -579,14 +572,11 @@ async def sync_sources(days: int = 7, db: Session = Depends(get_db)):
     for row in rows:
         name = row.get("dataSource.name")
         if name and name not in _S1_NATIVE_SOURCES:
-            # Keep the highest parser_detected ever seen for this source
-            new_detected = parsed_by_source.get(name, 0)
-            prev_detected = existing_detected.get(name, 0)
             db.add(ActiveSource(
                 source_name=name,
                 event_count=row.get("events", 0),
                 synced_at=synced_at,
-                parser_detected=max(new_detected, prev_detected),
+                parser_detected=parsed_by_source.get(name, 0),
             ))
             seen += 1
 
