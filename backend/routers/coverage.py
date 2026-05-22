@@ -1098,7 +1098,18 @@ def _compute_health(db) -> dict:
     parser_pct = round((covered_sources / total_sources * 100) if total_sources else 0.0, 1)
 
     # --- MITRE coverage ---
-    TOTAL_TACTICS = 14  # standard ATT&CK Enterprise tactic count
+    # Standard ATT&CK Enterprise tactics (14). Only count tactics that are
+    # in this canonical set, otherwise rule sources that label findings
+    # with non-canonical tactic names can push covered_tactics past
+    # TOTAL_TACTICS and produce mitre_pct > 100%.
+    CANONICAL_TACTICS = frozenset({
+        "Reconnaissance", "Resource Development", "Initial Access", "Execution",
+        "Persistence", "Privilege Escalation", "Defense Evasion", "Credential Access",
+        "Discovery", "Lateral Movement", "Collection", "Command and Control",
+        "Exfiltration", "Impact",
+    })
+    TOTAL_TACTICS = len(CANONICAL_TACTICS)
+
     rules = db.query(ParsedRule).filter_by(rule_type="library").all()
     total_rules = len(rules)
     covered_tactics: set = set()
@@ -1114,7 +1125,7 @@ def _compute_health(db) -> dict:
         if tactics or techniques:
             rules_with_mitre += 1
         for t in tactics:
-            if t and t != "Uncategorized":
+            if t and t in CANONICAL_TACTICS:
                 covered_tactics.add(t)
         for tech in techniques:
             k = tech.get("id") or tech.get("name")
