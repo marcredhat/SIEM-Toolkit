@@ -1045,17 +1045,26 @@ async function loadOnboardingPipeline() {
     _obPipelineData = data
     const sources = data.sources || []
 
+    // Split into two groups first so we can compute per-pipeline stats
+    const withRules    = sources.filter(s => s.has_detection_rules)
+    const withoutRules = sources.filter(s => !s.has_detection_rules)
+
+    const fullDone    = withRules.filter(s => s.completed === s.total).length
+    const fullProg    = withRules.filter(s => s.completed > 0 && s.completed < s.total).length
+    const partialDone = withoutRules.filter(s => s.completed === s.total).length
+    const partialProg = withoutRules.filter(s => s.completed > 0 && s.completed < s.total).length
+
     statsEl.innerHTML = `
-      <span class="px-3 py-1.5 rounded-full bg-emerald-900/40 ring-1 ring-emerald-700/40 text-xs text-emerald-300">✓ Fully Onboarded: ${data.fully_onboarded}</span>
-      <span class="px-3 py-1.5 rounded-full bg-amber-900/40 ring-1 ring-amber-700/40 text-xs text-amber-300">⟳ In Progress: ${data.in_progress}</span>
-      <span class="px-3 py-1.5 rounded-full bg-slate-800/60 ring-1 ring-white/5 text-xs text-slate-400">○ Not Started: ${data.not_started}</span>`
+      <span class="px-3 py-1.5 rounded-full bg-purple-900/40 ring-1 ring-purple-700/40 text-xs text-purple-300">Full Pipeline: ${withRules.length} sources</span>
+      <span class="px-3 py-1.5 rounded-full bg-emerald-900/40 ring-1 ring-emerald-700/40 text-xs text-emerald-300">✓ Complete: ${fullDone}</span>
+      <span class="px-3 py-1.5 rounded-full bg-amber-900/40 ring-1 ring-amber-700/40 text-xs text-amber-300">⟳ In Progress: ${fullProg}</span>
+      <span class="px-2 text-slate-700">|</span>
+      <span class="px-3 py-1.5 rounded-full bg-slate-700/40 ring-1 ring-slate-600/40 text-xs text-slate-300">Partial Pipeline: ${withoutRules.length} sources</span>
+      <span class="px-3 py-1.5 rounded-full bg-emerald-900/40 ring-1 ring-emerald-700/40 text-xs text-emerald-300">✓ Complete: ${partialDone}</span>
+      <span class="px-3 py-1.5 rounded-full bg-amber-900/40 ring-1 ring-amber-700/40 text-xs text-amber-300">⟳ In Progress: ${partialProg}</span>`
 
     const STAGE_ICONS = ['📥','📄','⚙️','🏷️','🔍','🔔']
     const STAGE_LABELS = ['Data Received','Parser File','Parser Active','Source Labeled','Detection Rules','Rules Firing']
-
-    // Split into two groups
-    const withRules    = sources.filter(s => s.has_detection_rules)
-    const withoutRules = sources.filter(s => !s.has_detection_rules)
 
     function renderRow(s, i) {
       const stageDots = s.stages.map((st, si) => {
