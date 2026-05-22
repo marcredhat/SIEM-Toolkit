@@ -571,7 +571,7 @@ async function cvLoad() {
         </div>
         <div class="bg-gradient-to-b from-gray-900 to-gray-950 ring-1 ring-white/5 rounded-xl p-4 text-center border-t-2 border-t-amber-500 shadow-sm">
           <div class="text-2xl font-bold ${s.stub_parsers > 0 ? 'text-amber-400' : 'text-gray-500'}">${s.stub_parsers}</div>
-          <div class="text-xs text-slate-500 mt-1">Incomplete Parser</div>
+          <div class="text-xs text-slate-500 mt-1">Incomplete Parser${s.stub_parsers > 0 ? `<br><span class="text-amber-600/80">missing dataSource.name</span>` : ''}</div>
         </div>
         <div class="bg-gradient-to-b from-gray-900 to-gray-950 ring-1 ring-white/5 rounded-xl p-4 text-center border-t-2 border-t-purple-500 shadow-sm">
           <div class="text-2xl font-bold text-purple-400">${s.parsers_loaded}</div>
