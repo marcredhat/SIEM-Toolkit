@@ -989,7 +989,7 @@ function renderOnboarding() {
           Show Pipeline
         </button>
       </div>
-      <div id="ob-pipeline-stats" class="flex flex-wrap gap-3">
+      <div id="ob-pipeline-stats" class="flex flex-col gap-2">
         <div class="px-3 py-1.5 rounded-full bg-slate-800/60 text-xs text-slate-500 animate-pulse">Loading…</div>
       </div>
       <div id="ob-pipeline-table" class="hidden mt-4"></div>
@@ -1055,13 +1055,16 @@ async function loadOnboardingPipeline() {
     const partialProg = withoutRules.filter(s => s.completed > 0 && s.completed < s.total).length
 
     statsEl.innerHTML = `
-      <span class="px-3 py-1.5 rounded-full bg-purple-900/40 ring-1 ring-purple-700/40 text-xs text-purple-300">Full Pipeline: ${withRules.length} sources</span>
-      <span class="px-3 py-1.5 rounded-full bg-emerald-900/40 ring-1 ring-emerald-700/40 text-xs text-emerald-300">✓ Complete: ${fullDone}</span>
-      <span class="px-3 py-1.5 rounded-full bg-amber-900/40 ring-1 ring-amber-700/40 text-xs text-amber-300">⟳ In Progress: ${fullProg}</span>
-      <span class="px-2 text-slate-700">|</span>
-      <span class="px-3 py-1.5 rounded-full bg-slate-700/40 ring-1 ring-slate-600/40 text-xs text-slate-300">Partial Pipeline: ${withoutRules.length} sources</span>
-      <span class="px-3 py-1.5 rounded-full bg-emerald-900/40 ring-1 ring-emerald-700/40 text-xs text-emerald-300">✓ Complete: ${partialDone}</span>
-      <span class="px-3 py-1.5 rounded-full bg-amber-900/40 ring-1 ring-amber-700/40 text-xs text-amber-300">⟳ In Progress: ${partialProg}</span>`
+      <div class="flex items-center gap-2">
+        <span class="px-3 py-1.5 rounded-full bg-purple-900/40 ring-1 ring-purple-700/40 text-xs text-purple-300">Full Pipeline: ${withRules.length} sources</span>
+        <span class="px-3 py-1.5 rounded-full bg-emerald-900/40 ring-1 ring-emerald-700/40 text-xs text-emerald-300">✓ Complete: ${fullDone}</span>
+        <span class="px-3 py-1.5 rounded-full bg-amber-900/40 ring-1 ring-amber-700/40 text-xs text-amber-300">⟳ In Progress: ${fullProg}</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="px-3 py-1.5 rounded-full bg-slate-700/40 ring-1 ring-slate-600/40 text-xs text-slate-300">Partial Pipeline: ${withoutRules.length} sources</span>
+        <span class="px-3 py-1.5 rounded-full bg-emerald-900/40 ring-1 ring-emerald-700/40 text-xs text-emerald-300">✓ Complete: ${partialDone}</span>
+        <span class="px-3 py-1.5 rounded-full bg-amber-900/40 ring-1 ring-amber-700/40 text-xs text-amber-300">⟳ In Progress: ${partialProg}</span>
+      </div>`
 
     const STAGE_ICONS = ['📥','📄','⚙️','🏷️','🔍','🔔']
     const STAGE_LABELS = ['Data Received','Parser File','Parser Active','Source Labeled','Detection Rules','Rules Firing']
