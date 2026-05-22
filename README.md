@@ -1,8 +1,8 @@
-# SIEM Toolkit — SentinelOne AI-SIEM
+# Parallax — SentinelOne AI-SIEM Coverage Toolkit
 
 > *Inspired by Pineapple Boy!* 🍍
 
-A self-hosted troubleshooting and visibility tool for SentinelOne AI-SIEM SecOps engineers. Runs as a Docker Compose stack against your SentinelOne demo or production tenant and provides real-time insight into parser coverage, detection library mapping, ingest volume, and data quality — all without leaving a single interface.
+A self-hosted coverage visibility tool for SentinelOne AI-SIEM SecOps engineers. Runs as a Docker Compose stack against your SentinelOne demo or production tenant and provides real-time insight into parser coverage, detection library mapping, ingest volume, and data quality — all without leaving a single interface.
 
 ---
 
