@@ -11,6 +11,11 @@ TOKEN = os.environ.get("S1_API_TOKEN", "")
 SDL_XDR_URL = os.environ.get("SDL_XDR_URL", "https://xdr.us1.sentinelone.net").rstrip("/")
 SDL_LOG_READ_KEY = os.environ.get("SDL_LOG_READ_KEY", "")
 
+# SDL Configuration Read Key — used to list/fetch parser files under /logParsers/
+# (separate from SDL_LOG_READ_KEY which is for querying events only).
+# Find it in the S1 console: Settings → Integrations → Data Lake API Keys → Configuration Read.
+SDL_CONFIG_READ_KEY = os.environ.get("SDL_CONFIG_READ_KEY", "")
+
 # Management Console API uses ApiToken auth
 HEADERS = {
     "Authorization": f"ApiToken {TOKEN}",
@@ -92,7 +97,7 @@ async def get_library_rules(page_size: int = 100) -> list:
     return results
 
 
-async def run_powerquery(query: str, from_date: str, to_date: str) -> dict:
+async def run_powerquery(query: str, from_date: str, to_date: str, max_count: int = 1000) -> dict:
     """
     Run a PowerQuery against the Singularity Data Lake via the Scalyr XDR API.
     Uses SDL_XDR_URL + SDL_LOG_READ_KEY (Scalyr readlog token).
@@ -109,7 +114,7 @@ async def run_powerquery(query: str, from_date: str, to_date: str) -> dict:
         "query": query,
         "startTime": start_ms,
         "endTime": end_ms,
-        "maxCount": 1000,
+        "maxCount": max_count,
     }
 
     async with httpx.AsyncClient(timeout=120) as client:
@@ -154,8 +159,47 @@ async def run_powerquery(query: str, from_date: str, to_date: str) -> dict:
         return {"events": matches}
 
 
+def _sdl_config_headers() -> dict:
+    """Auth headers for the SDL Configuration File API (uses POST /api/listFiles,
+    POST /api/getFile, etc.). Falls back to SDL_LOG_READ_KEY if no dedicated
+    Configuration Read key is set — that won't work for all endpoints, but lets
+    callers fail with a meaningful 401 instead of crashing."""
+    key = SDL_CONFIG_READ_KEY or SDL_LOG_READ_KEY
+    return {
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
+
+
 async def list_sdl_parsers() -> list[str]:
-    """List all parser filenames under /logParsers/ in SDL."""
+    """List parser paths under /logParsers/ via the SDL Configuration File API.
+
+    Requires SDL_CONFIG_READ_KEY (or higher) in .env. The endpoint is
+    POST <SDL_XDR_URL>/api/listFiles with {"pathPrefix": "/logParsers/"}.
+    Returns names without the /logParsers/ prefix, suitable for use as
+    filenames in the local parsers/ directory.
+    """
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            f"{SDL_XDR_URL}/api/listFiles",
+            headers=_sdl_config_headers(),
+            json={"pathPrefix": "/logParsers/"},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        paths = data.get("paths") or data.get("files") or []
+        # Normalize: strip leading /logParsers/ and ignore anything that isn't there
+        names: list[str] = []
+        for p in paths:
+            if isinstance(p, dict):
+                p = p.get("path") or p.get("name") or ""
+            if isinstance(p, str) and p.startswith("/logParsers/"):
+                names.append(p[len("/logParsers/"):])
+        return names
+
+
+async def list_sdl_parsers_legacy() -> list[str]:
+    """[Deprecated] Legacy management-console path — kept for reference but unused."""
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.get(
             f"{BASE_URL}/api/v1/files/logParsers",
@@ -170,46 +214,106 @@ async def list_sdl_parsers() -> list[str]:
 
 
 async def get_sdl_parser(filename: str) -> dict:
-    """Fetch a single SDL parser file by name."""
+    """Fetch a single SDL parser file by name via POST /api/getFile.
+
+    Returns the raw SDL response dict, e.g.
+    {"status": "success", "path": "/logParsers/Foo", "content": "...", "version": 3, ...}
+    """
+    path = filename if filename.startswith("/logParsers/") else f"/logParsers/{filename}"
     async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(
-            f"{BASE_URL}/api/v1/files/logParsers/{filename}",
-            headers=HEADERS,
+        resp = await client.post(
+            f"{SDL_XDR_URL}/api/getFile",
+            headers=_sdl_config_headers(),
+            json={"path": path},
         )
         resp.raise_for_status()
         return resp.json()
 
 
 async def get_account_id() -> str | None:
-    """Return the first account ID visible to the current token."""
+    """Return the first account ID visible to the current token.
+
+    Tries /accounts first (works for account-scoped or higher tokens). If that
+    returns 403 (site-scoped token), falls back to /sites and reads accountId
+    from the first site.
+    """
     async with httpx.AsyncClient(timeout=15) as client:
+        # Path 1: account-scoped token
         resp = await client.get(
             f"{BASE_URL}/web/api/v2.1/accounts",
             headers=HEADERS,
             params={"limit": 1},
         )
-        resp.raise_for_status()
-        accounts = resp.json().get("data", [])
-        return str(accounts[0]["id"]) if accounts else None
+        if resp.status_code == 200:
+            accounts = resp.json().get("data", [])
+            if accounts:
+                return str(accounts[0]["id"])
+        # Path 2: site-scoped token — accountId is embedded in sites payload
+        if resp.status_code in (401, 403):
+            sresp = await client.get(
+                f"{BASE_URL}/web/api/v2.1/sites",
+                headers=HEADERS,
+                params={"limit": 1},
+            )
+            if sresp.status_code == 200:
+                data = sresp.json().get("data", {})
+                sites = data.get("sites") if isinstance(data, dict) else data
+                if sites:
+                    return str(sites[0].get("accountId") or "") or None
+        return None
+
+
+async def get_scope_for_platform_rules() -> tuple[str, str] | None:
+    """Pick the best scope for /detection-library/platform-rules.
+
+    Returns (scopeLevel, scopeId). Tries account first, then site — site-scoped
+    tokens cannot list accounts but CAN query platform-rules with site scope.
+    """
+    async with httpx.AsyncClient(timeout=15) as client:
+        # Prefer account scope (broadest)
+        a = await client.get(
+            f"{BASE_URL}/web/api/v2.1/accounts",
+            headers=HEADERS,
+            params={"limit": 1},
+        )
+        if a.status_code == 200:
+            accounts = a.json().get("data", [])
+            if accounts:
+                return ("account", str(accounts[0]["id"]))
+        # Fall back to site scope (site-scoped tokens land here)
+        s = await client.get(
+            f"{BASE_URL}/web/api/v2.1/sites",
+            headers=HEADERS,
+            params={"limit": 1},
+        )
+        if s.status_code == 200:
+            data = s.json().get("data", {})
+            sites = data.get("sites") if isinstance(data, dict) else data
+            if sites:
+                sid = sites[0].get("id")
+                if sid:
+                    return ("site", str(sid))
+        return None
 
 
 async def get_platform_rules(page_size: int = 1000) -> list:
     """
     Fetch all Detection Library platform rules from /detection-library/platform-rules.
-    Requires scopeLevel + scopeId — uses account scope with the first visible account.
-    Returns list of rules, each with a 'sources' list (authoritative data source names).
+    Requires scopeLevel + scopeId. Tries account scope first, then site scope so
+    site-scoped tokens also work.
     """
-    account_id = await get_account_id()
-    if not account_id:
+    scope = await get_scope_for_platform_rules()
+    if not scope:
         return []
+    scope_level, scope_id = scope
 
     all_rules: list = []
     cursor: str = ""
     async with httpx.AsyncClient(timeout=60) as client:
         while True:
             params: dict = {
-                "scopeLevel": "account",
-                "scopeId": account_id,
+                "scopeLevel": scope_level,
+                "scopeId": scope_id,
                 "limit": page_size,
                 "cursor": cursor,
             }

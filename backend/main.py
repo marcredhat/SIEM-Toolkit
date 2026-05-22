@@ -11,6 +11,9 @@ with engine.connect() as _conn:
     _conn.execute(text(
         "ALTER TABLE active_sources ADD COLUMN IF NOT EXISTS parser_detected INTEGER DEFAULT 0"
     ))
+    _conn.execute(text(
+        "ALTER TABLE active_sources ADD COLUMN IF NOT EXISTS unlabelled BOOLEAN DEFAULT FALSE"
+    ))
     _conn.commit()
 
 app = FastAPI(title="SIEM Toolkit", version="1.0.0")

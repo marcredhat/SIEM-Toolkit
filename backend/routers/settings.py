@@ -14,6 +14,7 @@ FIELDS = [
     {"key": "S1_API_TOKEN",         "label": "Console API Token",             "secret": True,  "placeholder": "eyJ..."},
     {"key": "SDL_XDR_URL",          "label": "SDL XDR URL",                   "secret": False, "placeholder": "https://xdr.us1.sentinelone.net"},
     {"key": "SDL_LOG_READ_KEY",     "label": "SDL Log Read Key",              "secret": True,  "placeholder": "1DnK0Y4e..."},
+    {"key": "SDL_CONFIG_READ_KEY",       "label": "SDL Config Read Key",           "secret": True,  "placeholder": "Needs 'Manage config files' permission"},
     {"key": "ANTHROPIC_API_KEY",    "label": "Anthropic API Key",             "secret": True,  "placeholder": "sk-ant-..."},
 ]
 

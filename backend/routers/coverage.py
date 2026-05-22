@@ -207,16 +207,109 @@ async def upload_sigma(files: list[UploadFile] = File(...), db: Session = Depend
     return {"loaded": len(loaded), "rules": loaded}
 
 
+def _fetch_parsers_from_console(parsers_dir: str) -> dict:
+    """
+    Fetch every parser under /logParsers/ from the SDL console and write them
+    to parsers_dir.  Uses SDL_CONFIG_READ_KEY (needs 'Manage config files' permission)
+    and SDL_XDR_URL from the environment.
+
+    Returns {"fetched": N, "failed": [...], "skipped": reason_or_None}
+    """
+    import urllib.request, urllib.error, json as _json, os as _os
+
+    # Read live from .env file so Settings-page saves are picked up without restart
+    def _env_val(key: str) -> str:
+        val = _os.environ.get(key, "")
+        if not val:
+            env_path = _os.environ.get("ENV_FILE_PATH", "/app/.env")
+            try:
+                for line in open(env_path).read().splitlines():
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, _, v = line.partition("=")
+                        if k.strip() == key:
+                            val = v.strip()
+                            break
+            except Exception:
+                pass
+        return val
+
+    config_key = _env_val("SDL_CONFIG_READ_KEY")
+    base_url    = _env_val("SDL_XDR_URL").rstrip("/")
+
+    if not config_key:
+        return {"fetched": 0, "failed": [], "skipped": "SDL_CONFIG_READ_KEY not set"}
+    if not base_url:
+        return {"fetched": 0, "failed": [], "skipped": "SDL_XDR_URL not set"}
+
+    def _post(path: str, params: dict) -> dict:
+        url  = f"{base_url}{path}"
+        body = _json.dumps({**params, "token": config_key}).encode()
+        req  = urllib.request.Request(url, data=body, headers={
+            "Authorization": f"Bearer {config_key}",
+            "Content-Type":  "application/json",
+        })
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                return _json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode(errors="replace")[:300]
+            raise RuntimeError(f"HTTP {e.code} {path}: {err_body}")
+
+    # List all parser paths
+    res   = _post("/api/listFiles", {"pathPrefix": "/logParsers/"})
+
+    # Support multiple response shapes: {"paths": [...]} or {"files": [...]}
+    raw_paths = res.get("paths") or res.get("files") or []
+
+    # Each element may be a plain string or a dict with a "path"/"name" key
+    paths = []
+    for p in raw_paths:
+        if isinstance(p, dict):
+            p = p.get("path") or p.get("name") or ""
+        if isinstance(p, str) and p.startswith("/logParsers/"):
+            paths.append(p)
+
+    _os.makedirs(parsers_dir, exist_ok=True)
+    fetched, failed = 0, []
+
+    for p in paths:
+        name = p.rsplit("/", 1)[-1] or "_unnamed"
+        try:
+            r       = _post("/api/getFile", {"path": p})
+            content = r.get("content")
+            if content is None:
+                failed.append({"path": p, "error": "no content", "raw": r})
+                continue
+            with open(_os.path.join(parsers_dir, name), "w", encoding="utf-8") as fh:
+                fh.write(content)
+            fetched += 1
+        except Exception as e:
+            failed.append({"path": p, "error": str(e)})
+
+    # Surface the raw API response so callers can see exactly what was returned.
+    # Truncate paths list so the response stays readable (first 200).
+    debug_info = {
+        "response_keys": list(res.keys()),
+        "paths_found": len(paths),
+        "paths_listed": paths[:200],
+    }
+    return {"fetched": fetched, "failed": failed, "skipped": None, "debug": debug_info}
+
+
 @router.post("/load-parsers-from-sdl")
 async def load_parsers_from_sdl(db: Session = Depends(get_db)):
     """
-    Load SDL parsers from the local /app/parsers directory (mounted from ./parsers/).
-    Files are placed there by the MCP-based loader or by manual copy.
-    Falls back to a clear error if the directory is empty.
+    Sync SDL parsers from the console (if SDL_CONFIG_READ_KEY is set) then index
+    every file in the local /app/parsers directory into the DB.
     """
     import os
     parsers_dir = "/app/parsers"
 
+    # ── Step 1: fetch from console (best-effort) ────────────────────────────
+    fetch_result = _fetch_parsers_from_console(parsers_dir)
+
+    # ── Step 2: load whatever is on disk into the DB ─────────────────────────
     try:
         entries = [
             e for e in os.scandir(parsers_dir)
@@ -225,12 +318,19 @@ async def load_parsers_from_sdl(db: Session = Depends(get_db)):
     except FileNotFoundError:
         raise HTTPException(503, "parsers/ directory not found — check Docker volume mount")
 
+    if not entries and fetch_result["skipped"]:
+        raise HTTPException(
+            422,
+            f"No parser files found in parsers/ directory and console sync was skipped "
+            f"({fetch_result['skipped']}). "
+            "Add SDL_CONFIG_READ_KEY in Settings (needs 'Manage config files' permission) "
+            "or upload a parser file manually."
+        )
     if not entries:
         raise HTTPException(
             422,
-            "No parser files found in parsers/ directory. "
-            "Use 'Load SDL Parsers via MCP' in Claude Code to populate it, "
-            "or upload a parser file manually."
+            "No parser files found in parsers/ directory after console sync. "
+            "Check SDL_CONFIG_READ_KEY permissions ('Manage config files' required)."
         )
 
     loaded = []
@@ -258,7 +358,12 @@ async def load_parsers_from_sdl(db: Session = Depends(get_db)):
             errors.append({"parser": entry.name, "error": str(e)})
 
     db.commit()
-    return {"loaded": len(loaded), "parsers": loaded, "errors": errors}
+    return {
+        "loaded": len(loaded),
+        "parsers": loaded,
+        "errors": errors,
+        "console_fetch": fetch_result,
+    }
 
 
 @router.post("/upload-parser")
@@ -329,6 +434,9 @@ _S1_NATIVE_SOURCES = {
     "SentinelOne Ranger AD",
 }
 
+# Cached count of events with no dataSource.name — updated on each sync
+_unlabelled_event_count: int = -1  # -1 = not yet queried
+
 
 @router.post("/sync-sources")
 async def sync_sources(days: int = 7, db: Session = Depends(get_db)):
@@ -378,28 +486,34 @@ async def sync_sources(days: int = 7, db: Session = Depends(get_db)):
                 parser_detected=parsed_by_source.get(name, 0),
             ))
             seen += 1
+
     db.commit()
-    return {"synced": seen, "sources": [r["dataSource.name"] for r in rows if r.get("dataSource.name") and r["dataSource.name"] not in _S1_NATIVE_SOURCES]}
+    synced_names = [r["dataSource.name"] for r in rows if r.get("dataSource.name") and r["dataSource.name"] not in _S1_NATIVE_SOURCES]
+    return {"synced": seen, "sources": synced_names}
 
 
-def _build_parser_ds_index() -> dict[str, dict]:
+def _build_parser_ds_index() -> tuple[dict[str, dict], list[dict]]:
     """
-    Read all parser files from /app/parsers/ and build an index:
-      dataSource.name (exact, from parser attributes) → {parser_name, format_type}
+    Read all parser files from /app/parsers/ and build:
+      - index: dataSource.name → {parser_name, format_type}  (complete parsers)
+      - stubs:  list of {parser_name} for files with no dataSource.name attribute
 
     Format type is "grok", "dottedJson", or "custom".
     Sources with grok/dottedJson parsers are flagged as needing a proper parser.
     """
     import os, re
     parsers_dir = "/app/parsers"
-    _DS_NAME_RE = re.compile(r'"dataSource\.name"\s*:\s*"([^"]+)"')
+    _DS_NAME_RE = re.compile(r'"?dataSource\.name"?\s*:\s*"([^"]+)"')
     _FORMAT_TYPE_RE = re.compile(r'"type"\s*:\s*"([^"]+)"')
+    # Only treat a file as a parser if it has a formats section — rules out dashboards/saved-searches
+    _HAS_FORMATS_RE = re.compile(r'\bformats\s*:', re.IGNORECASE)
 
     index: dict[str, dict] = {}
+    stubs: list[dict] = []
     try:
         entries = [e for e in os.scandir(parsers_dir) if e.is_file() and not e.name.startswith(".")]
     except FileNotFoundError:
-        return index
+        return index, stubs
 
     for entry in entries:
         try:
@@ -408,9 +522,15 @@ def _build_parser_ds_index() -> dict[str, dict]:
         except Exception:
             continue
 
+        # Skip files that have no formats section — they're dashboards/queries, not parsers
+        if not _HAS_FORMATS_RE.search(content):
+            continue
+
         # Extract dataSource.name (may appear multiple times — take first)
         ds_match = _DS_NAME_RE.search(content)
         if not ds_match:
+            # Has formats but no dataSource.name — genuine stub parser
+            stubs.append({"parser_name": entry.name})
             continue
         ds_name = ds_match.group(1).strip()
 
@@ -425,7 +545,7 @@ def _build_parser_ds_index() -> dict[str, dict]:
 
         index[ds_name] = {"parser_name": entry.name, "format_type": fmt}
 
-    return index
+    return index, stubs
 
 
 @router.get("/map")
@@ -447,10 +567,19 @@ def get_coverage_map(db: Session = Depends(get_db)):
         parser_index.setdefault(pf.parser_name, set()).add(pf.field_name)
 
     # Build dataSource.name → {parser_name, format_type} index from parser files
-    ds_index = _build_parser_ds_index()
+    ds_index, stub_parsers = _build_parser_ds_index()
 
     def _normalize(s: str) -> str:
         return s.lower().replace(" ", "").replace("-", "").replace("_", "").replace(".", "")
+
+    def _find_stub_match(source_name: str) -> dict | None:
+        """Return stub parser info if a stub filename fuzzy-matches this source name."""
+        sn = _normalize(source_name)
+        for stub in stub_parsers:
+            fn = _normalize(stub["parser_name"])
+            if fn in sn or sn in fn:
+                return stub
+        return None
 
     def _find_parser_info(source_name: str) -> dict | None:
         """
@@ -514,6 +643,8 @@ def get_coverage_map(db: Session = Depends(get_db)):
         parser_info = _find_parser_info(src.source_name)
         parser_in_data = (src.parser_detected or 0) > 0
 
+        stub_info = _find_stub_match(src.source_name) if not parser_info else None
+
         if parser_info and parser_info["format_type"] == "custom":
             status = "covered"
             matched_parser = parser_info["parser_name"]
@@ -528,6 +659,12 @@ def get_coverage_map(db: Session = Depends(get_db)):
             status = "covered"
             matched_parser = parser_info["parser_name"] if parser_info else "detected in data"
             format_type = parser_info["format_type"] if parser_info else "unknown"
+        elif stub_info:
+            # A parser file exists but has no dataSource.name — it's a stub/incomplete
+            status = "stub_parser"
+            matched_parser = stub_info["parser_name"]
+            format_type = None
+            stub_info["suggested_ds_name"] = src.source_name
         else:
             status = "parser_needed"
             matched_parser = None
@@ -536,7 +673,7 @@ def get_coverage_map(db: Session = Depends(get_db)):
         if status == "covered":
             covered_count += 1
         else:
-            needed_count += 1
+            needed_count += 1  # stub_parser and parser_needed both count as needing work
 
         rules_for_src: list = [r for r in rule_by_source.get(src.source_name, []) if r["type"] == "library"]
 
@@ -614,6 +751,8 @@ def get_coverage_map(db: Session = Depends(get_db)):
             "status": status,
             "parser": matched_parser,
             "format_type": format_type,
+            "unlabelled": bool(src.unlabelled),
+            "stub_suggested_ds_name": stub_info.get("suggested_ds_name") if stub_info and status == "stub_parser" else None,
             "parser_fields": len(parser_provides),
             "parser_detected": src.parser_detected or 0,
             "rules": rules_for_src,
@@ -624,13 +763,20 @@ def get_coverage_map(db: Session = Depends(get_db)):
             "synced_at": src.synced_at.isoformat() if src.synced_at else None,
         })
 
+    # Only surface stub parsers that matched an active source with real events —
+    # unmatched stubs with zero events are noise and are suppressed.
+
     synced_at = active_sources[0].synced_at.isoformat() if active_sources else None
+
+    stub_count = sum(1 for s in sources_out if s["status"] == "stub_parser")
 
     return {
         "summary": {
             "active_sources": len(active_sources),
             "covered": covered_count,
             "parser_needed": needed_count,
+            "stub_parsers": stub_count,
+            "unlabelled_events": _unlabelled_event_count,
             "parsers_loaded": len(parser_index),
             "rules_loaded": len(rules),
         },
@@ -640,9 +786,20 @@ def get_coverage_map(db: Session = Depends(get_db)):
     }
 
 
+@router.get("/stub-parsers")
+def get_stub_parsers():
+    """Return all parser files that have a formats: section but no dataSource.name attribute.
+    Used by Parser Quality — Attributes Missing section. Independent of active sources."""
+    _, stubs = _build_parser_ds_index()
+    return {"stubs": stubs, "count": len(stubs)}
+
+
 @router.delete("/reset")
 def reset_data(db: Session = Depends(get_db)):
     db.query(ParsedRule).delete()
     db.query(ParserField).delete()
+    db.query(ActiveSource).delete()
     db.commit()
+    global _unlabelled_event_count
+    _unlabelled_event_count = -1
     return {"cleared": True}

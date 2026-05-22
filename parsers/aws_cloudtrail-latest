@@ -1,29 +1,957 @@
 {
   "attributes": {
     "dataSource.vendor": "AWS",
-    "dataSource.name": "AWS Web Application Firewall",
-    "dataSource.category": "web_security"
+    "dataSource.name": "AWS CloudTrail",
+    "dataSource.category": "security",
+    "metadata.product.vendor_name": "AWS",
+    "metadata.product.name": "AWS CloudTrail",
+    "metadata.version": "1.0.0"
   },
   "formats": [
     {
-      "id": "aws_waf_json",
-      "format": ".*${parse=json}$",
-      "rewrites": [
-        { "input": "timestamp", "output": "time", "match": ".*", "replace": "$0" },
-        { "input": "httpRequest.clientIp", "output": "src_endpoint.ip", "match": ".*", "replace": "$0" },
-        { "input": "action", "output": "disposition", "match": ".*", "replace": "$0" },
-        { "input": "httpRequest.uri", "output": "http_request.url.text", "match": ".*", "replace": "$0" },
-        { "input": "httpRequest.country", "output": "src_endpoint.location.country", "match": ".*", "replace": "$0" },
-        { "input": "httpRequest.httpMethod", "output": "http_request.http_method", "match": ".*", "replace": "$0" },
-        { "input": "webaclId", "output": "firewall_rule.uid", "match": ".*", "replace": "$0" },
-        { "input": "ruleGroupId", "output": "firewall_rule.name", "match": ".*", "replace": "$0" },
-        { "input": "terminatingRuleType", "output": "firewall_rule.type", "match": ".*", "replace": "$0" },
-        { "input": "httpRequest.httpVersion", "output": "http_request.version", "match": ".*", "replace": "$0" },
-        { "input": "httpRequest.args", "output": "http_request.url.query_string", "match": ".*", "replace": "$0" },
-        { "input": "requestId", "output": "http_request.uid", "match": ".*", "replace": "$0" },
-        { "input": "httpRequest.headers", "output": "http_request.http_headers", "match": ".*", "replace": "$0" }
-      ],
-      "halt": true
+      "format": "${parse=gron}$",
+      "skipNumericConversion": true
     }
-  ]
+  ],
+  "mappings": {
+    "version": 1,
+    "mappings": [
+      {
+        "predicate": "eventCategory matches '.*'",
+        "transformations": [
+          {
+            "constant": {
+              "field": "$s1_tmp.predicate_0",
+              "value": true,
+              "predicate": "userIdentity.arn matches '.*'"
+            }
+          }, {
+            "rename_tree": {
+              "from": "",
+              "to": "unmapped"
+            }
+          }, {
+            "copy": {
+              "to": "message",
+              "from": "unmapped.message"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.message"
+            }
+          }, {
+            "constant": {
+              "field": "class_uid",
+              "value": 4002
+            }
+          }, {
+            "constant": {
+              "field": "metadata.product.name",
+              "value": "AWS CloudTrail"
+            }
+          }, {
+            "constant": {
+              "field": "metadata.product.vendor_name",
+              "value": "AWS"
+            }
+          }, {
+            "constant": {
+              "field": "metadata.version",
+              "value": "1.0.0-rc3"
+            }
+          }, {
+            "constant": {
+              "field": "category_name",
+              "value": "Network Activity"
+            }
+          }, {
+            "constant": {
+              "field": "category_uid",
+              "value": 4
+            }
+          }, {
+            "constant": {
+              "field": "class_uid",
+              "value": 4002
+            }
+          }, {
+            "constant": {
+              "field": "class_name",
+              "value": "HTTP Activity"
+            }
+          }, {
+            "constant": {
+              "field": "metadata.product.name",
+              "value": "CloudTrail"
+            }
+          }, {
+            "constant": {
+              "field": "metadata.product.vendor_name",
+              "value": "AWS"
+            }
+          }, {
+            "constant": {
+              "field": "metadata.version",
+              "value": "1.0.0-rc3"
+            }
+          }, {
+            "constant": {
+              "field": "type_name",
+              "value": "HTTP Activity: Other"
+            }
+          }, {
+            "constant": {
+              "field": "type_uid",
+              "value": 400299
+            }
+          }, {
+            "constant": {
+              "field": "activity_id",
+              "value": 99
+            }
+          }, {
+            "constant": {
+              "field": "severity_id",
+              "value": 99
+            }
+          }, {
+            "constant": {
+              "field": "status_id",
+              "value": 99
+            }
+          }, {
+            "constant": {
+              "field": "status",
+              "value": "Other"
+            }
+          }, {
+            "constant": {
+              "field": "dataSource.vendor",
+              "value": "AWS"
+            }
+          }, {
+            "constant": {
+              "field": "dataSource.name",
+              "value": "CloudTrail"
+            }
+          }, {
+            "constant": {
+              "field": "dataSource.category",
+              "value": "security"
+            }
+          }, {
+            "constant": {
+              "field": "observables[0].type_id",
+              "value": 2
+            }
+          }, {
+            "constant": {
+              "field": "observables[0].type",
+              "value": "IP Address"
+            }
+          }, {
+            "constant": {
+              "field": "observables[0].name",
+              "value": "src_endpoint.ip"
+            }
+          }, {
+            "constant": {
+              "field": "observables[1].type_id",
+              "value": 99,
+              "predicate": "unmapped.$s1_tmp.predicate_0 == true"
+            }
+          }, {
+            "constant": {
+              "field": "observables[1].type",
+              "value": "Other",
+              "predicate": "unmapped.$s1_tmp.predicate_0 == true"
+            }
+          }, {
+            "constant": {
+              "field": "observables[1].name",
+              "value": "unmapped.userIdentity.arn",
+              "predicate": "unmapped.$s1_tmp.predicate_0 == true"
+            }
+          }, {
+            "copy": {
+              "to": "cloud.region",
+              "from": "unmapped.awsRegion"
+            }
+          }, {
+            "copy": {
+              "to": "metadata.product.feature.name",
+              "from": "unmapped.eventCategory"
+            }
+          }, {
+            "copy": {
+              "to": "metadata.uid",
+              "from": "unmapped.eventID"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.eventName",
+              "from": "unmapped.eventName"
+            }
+          }, {
+            "copy": {
+              "to": "api.service.name",
+              "from": "unmapped.eventSource"
+            }
+          }, {
+            "copy": {
+              "to": "metadata.original_time",
+              "from": "unmapped.eventTime"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.eventType",
+              "from": "unmapped.eventType"
+            }
+          }, {
+            "copy": {
+              "to": "metadata.product.version",
+              "from": "unmapped.eventVersion"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.managementEvent",
+              "from": "unmapped.managementEvent"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.readOnly",
+              "from": "unmapped.readOnly"
+            }
+          }, {
+            "copy": {
+              "to": "cloud.account.uid",
+              "from": "unmapped.recipientAccountId"
+            }
+          }, {
+            "copy": {
+              "to": "api.request.uid",
+              "from": "unmapped.requestID"
+            }
+          }, {
+            "copy": {
+              "to": "duration",
+              "from": "unmapped.requestParameters.durationSeconds"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.roleArn",
+              "from": "unmapped.requestParameters.roleArn"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.roleSessionName",
+              "from": "unmapped.requestParameters.roleSessionName"
+            }
+          }, {
+            "copy": {
+              "to": "api.request.uid",
+              "from": "unmapped.requestParameters.externalId"
+            }
+          }, {
+            "copy": {
+              "to": "resource.account.uid[*]",
+              "from": "unmapped.resources[*].accountId"
+            }
+          }, {
+            "copy": {
+              "to": "resource.type[*]",
+              "from": "unmapped.resources[*].type"
+            }
+          }, {
+            "copy": {
+              "to": "resource.uid[*]",
+              "from": "unmapped.resources[*].ARN"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.responseElements.assumedRoleUser.assumedRoleId",
+              "from": "unmapped.responseElements.assumedRoleUser.assumedRoleId"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.responseElements.assumedRoleUser.arn",
+              "from": "unmapped.responseElements.assumedRoleUser.arn"
+            }
+          }, {
+            "copy": {
+              "to": "actor.session.credential_uid",
+              "from": "unmapped.responseElements.credentials.accessKeyId"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.responseElements.credentials.sessionToken",
+              "from": "unmapped.responseElements.credentials.sessionToken"
+            }
+          }, {
+            "copy": {
+              "to": "actor.session.expiration_time",
+              "from": "unmapped.responseElements.credentials.expiration"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.responseElements.sourceIdentity",
+              "from": "unmapped.responseElements.sourceIdentity"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.sharedEventID",
+              "from": "unmapped.sharedEventID"
+            }
+          }, {
+            "copy": {
+              "to": "src_endpoint.ip",
+              "from": "unmapped.sourceIPAddress"
+            }
+          }, {
+            "copy": {
+              "to": "tls.version",
+              "from": "unmapped.tlsDetails.tlsVersion"
+            }
+          }, {
+            "copy": {
+              "to": "tls.cipher",
+              "from": "unmapped.tlsDetails.cipherSuite"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.tlsDetails.clientProvidedHostHeader",
+              "from": "unmapped.tlsDetails.clientProvidedHostHeader"
+            }
+          }, {
+            "copy": {
+              "to": "http_request.user_agent",
+              "from": "unmapped.userAgent"
+            }
+          }, {
+            "copy": {
+              "to": "actor.user.account.uid",
+              "from": "unmapped.userIdentity.accountId"
+            }
+          }, {
+            "copy": {
+              "to": "actor.user.uid",
+              "from": "unmapped.userIdentity.principalId"
+            }
+          }, {
+            "copy": {
+              "to": "actor.user.type",
+              "from": "unmapped.userIdentity.type"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.additionalEventData.SignatureVersion",
+              "from": "unmapped.additionalEventData.SignatureVersion"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.additionalEventData.CipherSuite",
+              "from": "unmapped.additionalEventData.CipherSuite"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.additionalEventData.bytesTransferredIn",
+              "from": "unmapped.additionalEventData.bytesTransferredIn"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.additionalEventData.AuthenticationMethod",
+              "from": "unmapped.additionalEventData.AuthenticationMethod"
+            }
+          }, {
+            "copy": {
+              "to": "resources.uid",
+              "from": "unmapped.additionalEventData.x-amz-id-2"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.additionalEventData.bytesTransferredOut",
+              "from": "unmapped.additionalEventData.bytesTransferredOut"
+            }
+          }, {
+            "copy": {
+              "to": "resources.name",
+              "from": "unmapped.requestParameters.bucketName"
+            }
+          }, {
+            "copy": {
+              "to": "src_endpoint.hostname",
+              "from": "unmapped.requestParameters.Host"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.acl",
+              "from": "unmapped.requestParameters.acl"
+            }
+          }, {
+            "copy": {
+              "to": "actor.invoked_by",
+              "from": "unmapped.userIdentity.invokedBy"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.keySpec",
+              "from": "unmapped.requestParameters.keySpec"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.keyId",
+              "from": "unmapped.requestParameters.keyId"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.encryptionContext.aws:cloudtrail:arn",
+              "from": "unmapped.requestParameters.encryptionContext.aws:cloudtrail:arn"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.encryptionContext.aws:s3:arn",
+              "from": "unmapped.requestParameters.encryptionContext.aws:s3:arn"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.agentVersion",
+              "from": "unmapped.requestParameters.agentVersion"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.agentStatus",
+              "from": "unmapped.requestParameters.agentStatus"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.platformType",
+              "from": "unmapped.requestParameters.platformType"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.platformName",
+              "from": "unmapped.requestParameters.platformName"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.platformVersion",
+              "from": "unmapped.requestParameters.platformVersion"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.iPAddress",
+              "from": "unmapped.requestParameters.iPAddress"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.computerName",
+              "from": "unmapped.requestParameters.computerName"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.agentName",
+              "from": "unmapped.requestParameters.agentName"
+            }
+          }, {
+            "copy": {
+              "to": "src_endpoint.instance_uid",
+              "from": "unmapped.requestParameters.instanceId"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.maxResults",
+              "from": "unmapped.requestParameters.maxResults"
+            }
+          }, {
+            "copy": {
+              "to": "cloud.zone",
+              "from": "unmapped.requestParameters.availabilityZone"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.availabilityZoneId",
+              "from": "unmapped.requestParameters.availabilityZoneId"
+            }
+          }, {
+            "copy": {
+              "to": "actor.user.credential_uid",
+              "from": "unmapped.userIdentity.accessKeyId"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.userIdentity.sessionContext.webIdFederationData",
+              "from": "unmapped.userIdentity.sessionContext.webIdFederationData"
+            }
+          }, {
+            "copy": {
+              "to": "actor.user.name",
+              "from": "unmapped.userIdentity.sessionContext.sessionIssuer.type"
+            }
+          }, {
+            "copy": {
+              "to": "actor.session.uid",
+              "from": "unmapped.userIdentity.sessionContext.sessionIssuer.principalId"
+            }
+          }, {
+            "copy": {
+              "to": "actor.session.issuer",
+              "from": "unmapped.userIdentity.sessionContext.sessionIssuer.arn"
+            }
+          }, {
+            "copy": {
+              "to": "actor.user.account.uid",
+              "from": "unmapped.userIdentity.sessionContext.sessionIssuer.accountId"
+            }
+          }, {
+            "copy": {
+              "to": "actor.session.issuer",
+              "from": "unmapped.userIdentity.sessionContext.sessionIssuer.userName"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.userIdentity.sessionContext.ec2RoleDelivery",
+              "from": "unmapped.userIdentity.sessionContext.ec2RoleDelivery"
+            }
+          }, {
+            "copy": {
+              "to": "actor.session.created_time",
+              "from": "unmapped.userIdentity.sessionContext.attributes.creationDate"
+            }
+          }, {
+            "cast": {
+              "field": "actor.session.created_time",
+              "type": "iso8601TimestampToEpochSec"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.userIdentity.sessionContext.attributes.mfaAuthenticated",
+              "from": "unmapped.userIdentity.sessionContext.attributes.mfaAuthenticated"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.userIdentity.arn",
+              "from": "unmapped.userIdentity.arn"
+            }
+          }, {
+            "copy": {
+              "to": "actor.user.name",
+              "from": "unmapped.userIdentity.userName"
+            }
+          }, {
+            "copy": {
+              "to": "api.response.error",
+              "from": "unmapped.errorCode"
+            }
+          }, {
+            "copy": {
+              "to": "api.response.error_message",
+              "from": "unmapped.errorMessage"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.edgeDeviceDetails",
+              "from": "unmapped.edgeDeviceDetails"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.sessionCredentialFromConsole",
+              "from": "unmapped.sessionCredentialFromConsole"
+            }
+          }, {
+            "copy": {
+              "to": "src_endpoint.uid",
+              "from": "unmapped.vpcEndpointId"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.serviceEventDetails",
+              "from": "unmapped.serviceEventDetails"
+            }
+          }, {
+            "copy": {
+              "to": "api.version",
+              "from": "unmapped.apiVersion"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.policy",
+              "from": "unmapped.requestParameters.policy"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.encryption",
+              "from": "unmapped.requestParameters.encryption"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.publicAccessBlock",
+              "from": "unmapped.requestParameters.publicAccessBlock"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.topicArn",
+              "from": "unmapped.requestParameters.topicArn"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.detectorId",
+              "from": "unmapped.requestParameters.detectorId"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.website",
+              "from": "unmapped.requestParameters.website"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.nextToken",
+              "from": "unmapped.requestParameters.nextToken"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.certificateArn",
+              "from": "unmapped.requestParameters.certificateArn"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.ownershipControls",
+              "from": "unmapped.requestParameters.ownershipControls"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.maxRecords",
+              "from": "unmapped.requestParameters.maxRecords"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.DescribeInstanceTypesRequest.NextToken",
+              "from": "unmapped.requestParameters.DescribeInstanceTypesRequest.NextToken"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.DescribeInstanceTypesRequest.MaxResults",
+              "from": "unmapped.requestParameters.DescribeInstanceTypesRequest.MaxResults"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.resourceIds",
+              "from": "unmapped.requestParameters.resourceIds"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.dBSnapshotIdentifier",
+              "from": "unmapped.requestParameters.dBSnapshotIdentifier"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.includeShared",
+              "from": "unmapped.requestParameters.includeShared"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.includePublic",
+              "from": "unmapped.requestParameters.includePublic"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.resourceIdList",
+              "from": "unmapped.requestParameters.resourceIdList"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.logGroupName",
+              "from": "unmapped.requestParameters.logGroupName"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.replication",
+              "from": "unmapped.requestParameters.replication"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.versioning",
+              "from": "unmapped.requestParameters.versioning"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.tagging",
+              "from": "unmapped.requestParameters.tagging"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.logging",
+              "from": "unmapped.requestParameters.logging"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.workGroup",
+              "from": "unmapped.requestParameters.workGroup"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.clusterStates",
+              "from": "unmapped.requestParameters.clusterStates"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.DescribeVpcEndpointsRequest",
+              "from": "unmapped.requestParameters.DescribeVpcEndpointsRequest"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.GetEbsDefaultKmsKeyIdRequest",
+              "from": "unmapped.requestParameters.GetEbsDefaultKmsKeyIdRequest"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.DescribeVpcEndpointServiceConfigurationsRequest",
+              "from": "unmapped.requestParameters.DescribeVpcEndpointServiceConfigurationsRequest"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.requestParameters.DescribeTransitGatewaysRequest",
+              "from": "unmapped.requestParameters.DescribeTransitGatewaysRequest"
+            }
+          }, {
+            "copy": {
+              "to": "api.request.uid",
+              "from": "unmapped.requestParameters.requestContext.awsAccountId"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.insightDetails.state",
+              "from": "unmapped.insightDetails.state"
+            }
+          }, {
+            "copy": {
+              "to": "api.service.name",
+              "from": "unmapped.insightDetails.eventSource"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.insightDetails.eventName",
+              "from": "unmapped.insightDetails.eventName"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.insightDetails.insightType",
+              "from": "unmapped.insightDetails.insightType"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.insightDetails.insightContext.statistics.baseline.average",
+              "from": "unmapped.insightDetails.insightContext.statistics.baseline.average"
+            }
+          }, {
+            "copy": {
+              "to": "unmapped.insightDetails.insightContext.statistics.insight.average",
+              "from": "unmapped.insightDetails.insightContext.statistics.insight.average"
+            }
+          }, {
+            "copy": {
+              "to": "duration",
+              "from": "unmapped.insightDetails.insightContext.statistics.insightDuration"
+            }
+          }, {
+            "copy": {
+              "to": "event.type",
+              "from": "unmapped.eventName"
+            }
+          }, {
+            "copy": {
+              "to": "activity_name",
+              "from": "unmapped.eventName"
+            }
+          }, {
+            "copy": {
+              "to": "observables[0].value",
+              "from": "unmapped.sourceIPAddress"
+            }
+          }, {
+            "copy": {
+              "to": "observables[1].value",
+              "from": "unmapped.userIdentity.arn",
+              "predicate": "unmapped.$s1_tmp.predicate_0 == true"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.awsRegion"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.eventCategory"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.eventID"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.eventSource"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.eventTime"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.eventVersion"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.recipientAccountId"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.requestID"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.requestParameters.durationSeconds"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.requestParameters.externalId"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.resources[*].accountId"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.resources[*].type"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.resources[*].ARN"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.responseElements.credentials.accessKeyId"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.responseElements.credentials.expiration"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.sourceIPAddress"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.tlsDetails.tlsVersion"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.tlsDetails.cipherSuite"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.userAgent"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.userIdentity.accountId"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.userIdentity.principalId"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.userIdentity.type"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.additionalEventData.x-amz-id-2"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.requestParameters.bucketName"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.requestParameters.Host"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.userIdentity.invokedBy"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.requestParameters.instanceId"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.requestParameters.availabilityZone"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.userIdentity.accessKeyId"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.userIdentity.sessionContext.sessionIssuer.type"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.userIdentity.sessionContext.sessionIssuer.principalId"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.userIdentity.sessionContext.sessionIssuer.arn"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.userIdentity.sessionContext.sessionIssuer.accountId"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.userIdentity.sessionContext.sessionIssuer.userName"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.userIdentity.sessionContext.attributes.creationDate"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.userIdentity.userName"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.errorCode"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.errorMessage"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.vpcEndpointId"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.apiVersion"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.requestParameters.requestContext.awsAccountId"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.insightDetails.eventSource"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.insightDetails.insightContext.statistics.insightDuration"
+            }
+          }, {
+            "drop": {
+              "field": "unmapped.$s1_tmp.predicate_0"
+            }
+          }
+        ]
+      }
+    ]
+  }
 }

@@ -1,5 +1,5 @@
 import os
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text, Boolean
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import declarative_base, sessionmaker
 from datetime import datetime
@@ -37,6 +37,7 @@ class ActiveSource(Base):
     event_count = Column(Integer, default=0)
     synced_at = Column(DateTime, default=datetime.utcnow)
     parser_detected = Column(Integer, default=0)  # >0 means parsed events seen in data lake
+    unlabelled = Column(Boolean, default=False)   # True = events had no dataSource.name
 
 
 class IngestSnapshot(Base):
