@@ -1306,6 +1306,7 @@ def get_dependency_map(db: Session = Depends(get_db)):
         out.append({
             "rule": rule.name,
             "rule_id": rule.rule_id,
+            "product": _product_from_data_sources(data_sources),
             "sources": source_statuses,
             "source_count": len(data_sources),
             "tactics": tactics,
