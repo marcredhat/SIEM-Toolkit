@@ -190,7 +190,7 @@ async function homeLoadStats() {
       ${homeStat(pct + '%', 'Parser Coverage', pctColor)}
       ${homeStat(total.toLocaleString(), 'Active Sources', 'text-blue-400')}
       ${homeStat(covered.toLocaleString(), 'Covered', 'text-emerald-400')}
-      ${homeStat(stub.toLocaleString(), 'Incomplete Parser', stub > 0 ? 'text-amber-400' : 'text-gray-500')}`
+      ${homeStat(stub.toLocaleString(), 'Incomplete Parser', stub > 0 ? 'text-amber-400' : 'text-gray-500', stub > 0 ? 'missing dataSource.name<br>Listed on Parser Quality page' : '')}`
 
     // Top incomplete parsers by volume
     const incomplete = sources
@@ -230,7 +230,7 @@ async function homeLoadStats() {
   }
 }
 
-function homeStat(value, label, valueClass) {
+function homeStat(value, label, valueClass, note) {
   const accent = valueClass.includes('emerald') ? 'border-t-2 border-t-emerald-500'
     : valueClass.includes('red') ? 'border-t-2 border-t-red-500'
     : valueClass.includes('purple') ? 'border-t-2 border-t-purple-500'
@@ -239,6 +239,7 @@ function homeStat(value, label, valueClass) {
   return `<div class="bg-gradient-to-b from-gray-900 to-gray-950 ring-1 ring-white/5 rounded-xl p-4 text-center ${accent} shadow-sm">
     <div class="text-2xl font-bold ${valueClass} mb-1">${value}</div>
     <div class="text-xs text-slate-500">${label}</div>
+    ${note ? `<div class="text-xs text-slate-600 mt-1">${note}</div>` : ''}
   </div>`
 }
 
