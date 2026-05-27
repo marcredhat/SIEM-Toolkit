@@ -21,6 +21,11 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - DATABASE_URL=postgresql://siem:siem@db:5432/siem
       - DETECTIONS_FILE=/app/data/detections.json
+      - INGEST_PREWARM=${INGEST_PREWARM:-0}
+      - INGEST_PREWARM_HOURS=${INGEST_PREWARM_HOURS:-1,24,168}
+      - INGEST_PREWARM_DAYS=${INGEST_PREWARM_DAYS:-7}
+      - INGEST_PREWARM_DAILY_VOLUME_DAYS=${INGEST_PREWARM_DAILY_VOLUME_DAYS:-5}
+      - INGEST_PREWARM_INTERVAL_SECONDS=${INGEST_PREWARM_INTERVAL_SECONDS:-240}
     depends_on:
       db:
         condition: service_healthy

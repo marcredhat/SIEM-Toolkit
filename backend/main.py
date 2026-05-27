@@ -46,6 +46,14 @@ app = FastAPI(title="SIEM Toolkit", version="1.0.0")
 
 
 @app.on_event("startup")
+async def start_ingest_prewarmer():
+    """Start optional background pre-warmer for the Ingest Dashboard cache.
+    Opt-in via INGEST_PREWARM=1. See backend/services/prewarmer.py."""
+    from services import prewarmer
+    prewarmer.start_if_enabled()
+
+
+@app.on_event("startup")
 async def auto_load_detections():
     """
     Auto-load detection library rules on startup.
