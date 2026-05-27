@@ -724,13 +724,6 @@ function cvSetFilter(f) {
     return `<span class="text-gray-700">—</span>`
   }
 
-  function toggleDetections(uid) {
-    const body = document.getElementById(uid)
-    const chev = document.getElementById(uid + '-chev')
-    if (!body) return
-    const open = body.classList.toggle('hidden')
-    if (chev) chev.style.transform = open ? '' : 'rotate(180deg)'
-  }
 
   function parserCell(s) {
     if (s.status === 'covered') {
@@ -2059,6 +2052,14 @@ async function loadMitre() {
   } catch(e) {
     if (gridEl) gridEl.innerHTML = `<div class="col-span-full text-red-400 text-sm">${esc(e.message)}</div>`
   }
+}
+
+function toggleDetections(uid) {
+  const body = document.getElementById(uid)
+  const chev = document.getElementById(uid + '-chev')
+  if (!body) return
+  const open = body.classList.toggle('hidden')
+  if (chev) chev.style.transform = open ? '' : 'rotate(180deg)'
 }
 
 function mitreToggleTactic(bodyId, chevId) {
