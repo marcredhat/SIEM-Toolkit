@@ -2274,7 +2274,7 @@ function depMapRender() {
           onclick="toggleDepMapProduct('${uid}')">
         <td colspan="4" class="py-3 px-4">
           <div class="flex items-center gap-2">
-            <svg id="${uid}-chev" class="w-4 h-4 ${chevColor} transition-transform shrink-0 ${startOpen ? 'rotate-180' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg id="${uid}-chev" class="w-4 h-4 ${chevColor} transition-transform shrink-0" style="${startOpen ? 'transform:rotate(180deg)' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
             </svg>
             <span class="text-sm font-bold ${labelColor} uppercase tracking-wider">${label}</span>
