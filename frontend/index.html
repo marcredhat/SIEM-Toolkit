@@ -2198,6 +2198,9 @@ function depMapRender() {
     no_parser:'bg-amber-900/50 text-amber-300 border-amber-700',
   }
 
+  // Shared column widths — must match outer table colgroup
+  const COL_GROUP = `<colgroup><col style="width:45%"><col style="width:30%"><col style="width:15%"><col style="width:10%"></colgroup>`
+
   // Build rule rows for a list of rules
   function ruleRows(ruleList) {
     return ruleList.map((r, i) => {
@@ -2250,7 +2253,7 @@ function depMapRender() {
           </td>
         </tr>
         <tr id="${uid}" class="hidden"><td colspan="4" class="p-0">
-          <table class="w-full text-sm"><tbody>${ruleRows(prodRules)}</tbody></table>
+          <table class="w-full text-sm">${COL_GROUP}<tbody>${ruleRows(prodRules)}</tbody></table>
         </td></tr>`
     }).join('')
   }
@@ -2281,19 +2284,14 @@ function depMapRender() {
         </td>
       </tr>
       <tr id="${uid}" class="${startOpen ? '' : 'hidden'}"><td colspan="4" class="p-0">
-        <table class="w-full text-sm"><tbody>${productSections(categoryRules, uid)}</tbody></table>
+        <table class="w-full text-sm">${COL_GROUP}<tbody>${productSections(categoryRules, uid)}</tbody></table>
       </td></tr>`
   }
 
   tableEl.innerHTML = `
     <div class="overflow-x-auto rounded-xl ring-1 ring-white/5">
       <table class="w-full text-sm">
-        <colgroup>
-          <col style="width:45%">
-          <col style="width:30%">
-          <col style="width:15%">
-          <col style="width:10%">
-        </colgroup>
+        ${COL_GROUP}
         <thead><tr class="text-left text-slate-500 bg-slate-900/60 border-b border-white/5">
           <th class="py-3 px-4 font-medium text-xs uppercase tracking-wide">Rule Name</th>
           <th class="py-3 px-4 font-medium text-xs uppercase tracking-wide">Required Sources</th>
