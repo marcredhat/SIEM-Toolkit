@@ -2198,71 +2198,92 @@ function depMapRender() {
     no_parser:'bg-amber-900/50 text-amber-300 border-amber-700',
   }
 
-  // Group by product; at-risk products sort first
-  const byProduct = {}
-  for (const r of display) {
-    const prod = r.product || 'SentinelOne'
-    if (!byProduct[prod]) byProduct[prod] = []
-    byProduct[prod].push(r)
-  }
-  const sortedProducts = Object.keys(byProduct).sort((a, b) => {
-    const aRisk = byProduct[a].some(r => r.at_risk) ? 0 : 1
-    const bRisk = byProduct[b].some(r => r.at_risk) ? 0 : 1
-    return aRisk - bRisk || a.localeCompare(b)
-  })
-
-  const sections = sortedProducts.map(product => {
-    const prodRules = byProduct[product]
-    const atRiskCount = prodRules.filter(r => r.at_risk).length
-    const uid = 'depmap-' + product.replace(/[^a-z0-9]/gi, '_')
-
-    const headerBg = atRiskCount > 0 ? 'bg-red-950/40 hover:bg-red-950/60' : 'bg-slate-900/60 hover:bg-slate-800/60'
-    const countBadge = atRiskCount > 0
-      ? `<span class="ml-2 px-2 py-0.5 rounded-full text-xs font-medium border bg-red-900/50 text-red-300 border-red-700">⚠ ${atRiskCount} at risk</span>`
-      : `<span class="ml-2 text-xs text-slate-500">${prodRules.length} rule${prodRules.length !== 1 ? 's' : ''}</span>`
-
-    const rows = prodRules.map((r, i) => {
+  // Build rule rows for a list of rules
+  function ruleRows(ruleList) {
+    return ruleList.map((r, i) => {
       const statusBadge = r.at_risk
         ? `<span class="px-2 py-0.5 rounded-full text-xs font-medium border bg-red-900/50 text-red-300 border-red-700">⚠ At Risk</span>`
         : `<span class="px-2 py-0.5 rounded-full text-xs font-medium border bg-emerald-900/50 text-emerald-300 border-emerald-700">✓ Covered</span>`
-
       const sourceBadges = r.no_sources
         ? `<span class="text-xs text-slate-600">—</span>`
         : r.sources.map(s =>
             `<span class="px-1.5 py-0.5 rounded border text-xs font-mono ${SOURCE_STATUS_STYLE[s.status] || ''}" title="${s.status}">${esc(s.source)}</span>`
           ).join(' ')
-
       const alerts = r.generated_alerts != null
         ? `<span class="text-xs tabular-nums ${r.generated_alerts > 0 ? 'text-emerald-400' : 'text-slate-600'}">${r.generated_alerts.toLocaleString()}</span>`
         : `<span class="text-xs text-slate-700">—</span>`
-
       return `<tr class="${i % 2 === 1 ? 'bg-white/[0.015]' : ''} border-b border-white/5 hover:bg-white/[0.04] transition-colors">
-        <td class="py-2.5 px-4 text-xs text-gray-200 font-medium max-w-xs">${esc(r.rule)}</td>
+        <td class="py-2.5 pl-12 pr-4 text-xs text-gray-200 font-medium max-w-xs">${esc(r.rule)}</td>
         <td class="py-2.5 px-4 text-xs"><div class="flex flex-wrap gap-1">${sourceBadges}</div></td>
         <td class="py-2.5 px-4">${statusBadge}</td>
         <td class="py-2.5 px-4">${alerts}</td>
       </tr>`
     }).join('')
+  }
 
+  // Build product sub-group rows within a category
+  function productSections(ruleList, prefix) {
+    const byProduct = {}
+    for (const r of ruleList) {
+      const prod = r.product || 'SentinelOne'
+      if (!byProduct[prod]) byProduct[prod] = []
+      byProduct[prod].push(r)
+    }
+    return Object.keys(byProduct).sort((a, b) => a.localeCompare(b)).map(product => {
+      const prodRules = byProduct[product]
+      const uid = prefix + '_' + product.replace(/[^a-z0-9]/gi, '_')
+      const atRiskCount = prodRules.filter(r => r.at_risk).length
+      const countBadge = atRiskCount > 0
+        ? `<span class="ml-2 px-2 py-0.5 rounded-full text-xs font-medium border bg-red-900/50 text-red-300 border-red-700">⚠ ${atRiskCount} at risk</span>`
+        : `<span class="ml-2 text-xs text-slate-500">${prodRules.length} rule${prodRules.length !== 1 ? 's' : ''}</span>`
+      return `
+        <tr class="bg-slate-800/40 hover:bg-slate-800/60 border-b border-white/5 cursor-pointer select-none transition-colors"
+            onclick="toggleDepMapProduct('${uid}')">
+          <td colspan="4" class="py-2 pl-8 pr-4">
+            <div class="flex items-center gap-2">
+              <svg id="${uid}-chev" class="w-3 h-3 text-slate-500 transition-transform shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+              </svg>
+              <span class="text-xs font-medium text-slate-300 uppercase tracking-wide">${esc(product)}</span>
+              ${countBadge}
+            </div>
+          </td>
+        </tr>
+        <tr id="${uid}" class="hidden"><td colspan="4" class="p-0">
+          <table class="w-full text-sm"><tbody>${ruleRows(prodRules)}</tbody></table>
+        </td></tr>`
+    }).join('')
+  }
+
+  // Split into At Risk / Covered outer categories
+  const atRiskRules  = display.filter(r => r.at_risk)
+  const coveredRules = display.filter(r => !r.at_risk)
+
+  function categorySection(label, categoryRules, uid, isRisk) {
+    if (!categoryRules.length) return ''
+    const startOpen = isRisk  // At Risk expanded by default, Covered collapsed
+    const headerBg = isRisk ? 'bg-red-900/30 hover:bg-red-900/40' : 'bg-emerald-900/20 hover:bg-emerald-900/30'
+    const chevColor = isRisk ? 'text-red-400' : 'text-emerald-400'
+    const labelColor = isRisk ? 'text-red-300' : 'text-emerald-300'
+    const countColor = isRisk ? 'text-red-400' : 'text-emerald-400'
     return `
-      <tr class="${headerBg} border-b border-white/5 cursor-pointer select-none transition-colors"
+      <tr class="${headerBg} border-b border-white/10 cursor-pointer select-none transition-colors"
           onclick="toggleDepMapProduct('${uid}')">
-        <td colspan="4" class="py-2.5 px-4">
+        <td colspan="4" class="py-3 px-4">
           <div class="flex items-center gap-2">
-            <svg id="${uid}-chev" class="w-3.5 h-3.5 text-slate-400 transition-transform shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg id="${uid}-chev" class="w-4 h-4 ${chevColor} transition-transform shrink-0 ${startOpen ? 'rotate-180' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
             </svg>
-            <span class="text-xs font-semibold text-slate-200 uppercase tracking-wide">${esc(product)}</span>
-            ${countBadge}
+            <span class="text-sm font-bold ${labelColor} uppercase tracking-wider">${label}</span>
+            <span class="text-sm font-bold ${countColor}">${categoryRules.length}</span>
+            <span class="text-xs text-slate-500">rule${categoryRules.length !== 1 ? 's' : ''}</span>
           </div>
         </td>
       </tr>
-      <tr id="${uid}" class="hidden"><td colspan="4" class="p-0">
-        <table class="w-full text-sm">
-          <tbody>${rows}</tbody>
-        </table>
+      <tr id="${uid}" class="${startOpen ? '' : 'hidden'}"><td colspan="4" class="p-0">
+        <table class="w-full text-sm"><tbody>${productSections(categoryRules, uid)}</tbody></table>
       </td></tr>`
-  }).join('')
+  }
 
   tableEl.innerHTML = `
     <div class="overflow-x-auto rounded-xl ring-1 ring-white/5">
@@ -2273,7 +2294,10 @@ function depMapRender() {
           <th class="py-3 px-4 font-medium text-xs uppercase tracking-wide">Status</th>
           <th class="py-3 px-4 font-medium text-xs uppercase tracking-wide">Alerts</th>
         </tr></thead>
-        <tbody>${sections}</tbody>
+        <tbody>
+          ${categorySection('⚠ At Risk', atRiskRules,  'cat_atrisk',  true)}
+          ${categorySection('✓ Covered', coveredRules, 'cat_covered', false)}
+        </tbody>
       </table>
     </div>
     <p class="text-xs text-slate-600 mt-2">Source badges: <span class="text-emerald-400">green</span> = healthy · <span class="text-red-400">red</span> = inactive · <span class="text-amber-400">amber</span> = no parser</p>`
