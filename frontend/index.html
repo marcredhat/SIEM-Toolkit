@@ -2213,10 +2213,10 @@ function depMapRender() {
         ? `<span class="text-xs tabular-nums ${r.generated_alerts > 0 ? 'text-emerald-400' : 'text-slate-600'}">${r.generated_alerts.toLocaleString()}</span>`
         : `<span class="text-xs text-slate-700">—</span>`
       return `<tr class="${i % 2 === 1 ? 'bg-white/[0.015]' : ''} border-b border-white/5 hover:bg-white/[0.04] transition-colors">
-        <td class="py-2.5 pl-12 pr-4 text-xs text-gray-200 font-medium max-w-xs">${esc(r.rule)}</td>
+        <td class="py-2.5 pl-12 pr-4 text-xs text-gray-200 font-medium">${esc(r.rule)}</td>
         <td class="py-2.5 px-4 text-xs"><div class="flex flex-wrap gap-1">${sourceBadges}</div></td>
-        <td class="py-2.5 px-4">${statusBadge}</td>
-        <td class="py-2.5 px-4">${alerts}</td>
+        <td class="py-2.5 px-4 text-center">${statusBadge}</td>
+        <td class="py-2.5 px-4 text-right text-xs tabular-nums">${alerts}</td>
       </tr>`
     }).join('')
   }
@@ -2288,11 +2288,17 @@ function depMapRender() {
   tableEl.innerHTML = `
     <div class="overflow-x-auto rounded-xl ring-1 ring-white/5">
       <table class="w-full text-sm">
+        <colgroup>
+          <col style="width:45%">
+          <col style="width:30%">
+          <col style="width:15%">
+          <col style="width:10%">
+        </colgroup>
         <thead><tr class="text-left text-slate-500 bg-slate-900/60 border-b border-white/5">
           <th class="py-3 px-4 font-medium text-xs uppercase tracking-wide">Rule Name</th>
           <th class="py-3 px-4 font-medium text-xs uppercase tracking-wide">Required Sources</th>
-          <th class="py-3 px-4 font-medium text-xs uppercase tracking-wide">Status</th>
-          <th class="py-3 px-4 font-medium text-xs uppercase tracking-wide">Alerts</th>
+          <th class="py-3 px-4 font-medium text-xs uppercase tracking-wide text-center">Status</th>
+          <th class="py-3 px-4 font-medium text-xs uppercase tracking-wide text-right">Alerts</th>
         </tr></thead>
         <tbody>
           ${categorySection('⚠ At Risk', atRiskRules,  'cat_atrisk',  true)}
