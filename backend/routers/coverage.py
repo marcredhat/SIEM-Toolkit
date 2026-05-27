@@ -602,6 +602,15 @@ async def sync_sources(days: int = 7, db: Session = Depends(get_db)):
     return {"synced": seen, "sources": synced_names}
 
 
+def _product_from_data_sources(data_sources: list) -> str:
+    """Derive a product label from a rule's data_sources list.
+    Prefers non-SentinelOne entries so product-specific rules get meaningful labels."""
+    if not data_sources:
+        return "SentinelOne"
+    non_s1 = [d for d in data_sources if d.lower() not in ("sentinelone", "s1")]
+    return non_s1[0] if non_s1 else data_sources[0]
+
+
 def _build_parser_ds_index() -> tuple[dict[str, dict], list[dict]]:
     """
     Read all parser files from /app/parsers/ and build:
