@@ -3,36 +3,57 @@ import asyncio
 import httpx
 from datetime import datetime, timezone
 
-BASE_URL = os.environ.get("S1_BASE_URL", "https://demo.sentinelone.net").rstrip("/")
-TOKEN = os.environ.get("S1_API_TOKEN", "")
-
-# Configurable PowerQuery timeout — SDL queries on large tenants can exceed 2 min.
-# Set SDL_PQ_TIMEOUT in .env (seconds). Default: 600.
-SDL_PQ_TIMEOUT = int(os.environ.get("SDL_PQ_TIMEOUT", "600"))
-# How many times to retry on ReadTimeout before giving up. Default: 1 (one retry).
-SDL_PQ_TIMEOUT_RETRIES = int(os.environ.get("SDL_PQ_TIMEOUT_RETRIES", "1"))
-
-# Scalyr/XDR PowerQuery credentials — from SDL_XDR_URL + SDL_LOG_READ_KEY
-# in the SentinelOne console: Settings → Integrations → Data Lake API Keys
-SDL_XDR_URL = os.environ.get("SDL_XDR_URL", "https://xdr.us1.sentinelone.net").rstrip("/")
-SDL_LOG_READ_KEY = os.environ.get("SDL_LOG_READ_KEY", "")
-
-# SDL Configuration Read Key — used to list/fetch parser files under /logParsers/
-# (separate from SDL_LOG_READ_KEY which is for querying events only).
-# Find it in the S1 console: Settings → Integrations → Data Lake API Keys → Configuration Read.
-SDL_CONFIG_READ_KEY = os.environ.get("SDL_CONFIG_READ_KEY", "")
-
-# Management Console API uses ApiToken auth
-HEADERS = {
-    "Authorization": f"ApiToken {TOKEN}",
-    "Content-Type": "application/json",
+# Mutable credentials dict — initialised from env vars, overridable at runtime
+# via set_active_console(). All functions read from here instead of module constants.
+_active: dict = {
+    "BASE_URL": os.environ.get("S1_BASE_URL", "https://demo.sentinelone.net").rstrip("/"),
+    "TOKEN": os.environ.get("S1_API_TOKEN", ""),
+    # Configurable PowerQuery timeout — SDL queries on large tenants can exceed 2 min.
+    # Set SDL_PQ_TIMEOUT in .env (seconds). Default: 600.
+    "SDL_PQ_TIMEOUT": int(os.environ.get("SDL_PQ_TIMEOUT", "600")),
+    # How many times to retry on ReadTimeout before giving up. Default: 1 (one retry).
+    "SDL_PQ_TIMEOUT_RETRIES": int(os.environ.get("SDL_PQ_TIMEOUT_RETRIES", "1")),
+    # Scalyr/XDR PowerQuery credentials — from SDL_XDR_URL + SDL_LOG_READ_KEY
+    "SDL_XDR_URL": os.environ.get("SDL_XDR_URL", "https://xdr.us1.sentinelone.net").rstrip("/"),
+    "SDL_LOG_READ_KEY": os.environ.get("SDL_LOG_READ_KEY", ""),
+    # SDL Configuration Read Key — used to list/fetch parser files under /logParsers/
+    "SDL_CONFIG_READ_KEY": os.environ.get("SDL_CONFIG_READ_KEY", ""),
 }
+
+
+def set_active_console(creds: dict) -> None:
+    """Update the active credentials from a ConsoleConfig record.
+
+    Expected keys (all optional — missing keys leave current value unchanged):
+        s1_base_url, s1_api_token, sdl_xdr_url, sdl_log_read_key,
+        sdl_config_read_key, sdl_pq_timeout
+    """
+    if "s1_base_url" in creds:
+        _active["BASE_URL"] = (creds["s1_base_url"] or "").rstrip("/")
+    if "s1_api_token" in creds:
+        _active["TOKEN"] = creds["s1_api_token"] or ""
+    if "sdl_xdr_url" in creds:
+        _active["SDL_XDR_URL"] = (creds["sdl_xdr_url"] or "").rstrip("/")
+    if "sdl_log_read_key" in creds:
+        _active["SDL_LOG_READ_KEY"] = creds["sdl_log_read_key"] or ""
+    if "sdl_config_read_key" in creds:
+        _active["SDL_CONFIG_READ_KEY"] = creds["sdl_config_read_key"] or ""
+    if "sdl_pq_timeout" in creds:
+        _active["SDL_PQ_TIMEOUT"] = int(creds["sdl_pq_timeout"] or 600)
 
 
 def _iso_to_epoch_ms(iso_str: str) -> int:
     """Convert ISO-8601 UTC string to epoch milliseconds for Scalyr API."""
     dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
     return int(dt.timestamp() * 1000)
+
+
+def _headers() -> dict:
+    """Build Management Console API auth headers from current active credentials."""
+    return {
+        "Authorization": f"ApiToken {_active['TOKEN']}",
+        "Content-Type": "application/json",
+    }
 
 
 async def get_star_rules(page_size: int = 100) -> list:
@@ -45,8 +66,8 @@ async def get_star_rules(page_size: int = 100) -> list:
             if cursor:
                 params["cursor"] = cursor
             resp = await client.get(
-                f"{BASE_URL}/web/api/v2.1/cloud-detection/rules",
-                headers=HEADERS,
+                f"{_active['BASE_URL']}/web/api/v2.1/cloud-detection/rules",
+                headers=_headers(),
                 params=params,
             )
             resp.raise_for_status()
@@ -72,8 +93,8 @@ async def get_library_rules(page_size: int = 100) -> list:
             if cursor:
                 params["cursor"] = cursor
             resp = await client.get(
-                f"{BASE_URL}/web/api/v2.1/detection-library/rules",
-                headers=HEADERS,
+                f"{_active['BASE_URL']}/web/api/v2.1/detection-library/rules",
+                headers=_headers(),
                 params=params,
             )
             # 400 typically means site-scoped token — return empty rather than crash
@@ -109,14 +130,14 @@ async def run_powerquery(query: str, from_date: str, to_date: str, max_count: in
     Uses SDL_XDR_URL + SDL_LOG_READ_KEY (Scalyr readlog token).
     The Scalyr PowerQuery API is synchronous — results return in one request.
     """
-    if not SDL_LOG_READ_KEY:
+    if not _active["SDL_LOG_READ_KEY"]:
         return {"events": [], "error": "SDL_LOG_READ_KEY not configured — add it to .env"}
 
     start_ms = _iso_to_epoch_ms(from_date)
     end_ms = _iso_to_epoch_ms(to_date)
 
     payload = {
-        "token": SDL_LOG_READ_KEY,
+        "token": _active["SDL_LOG_READ_KEY"],
         "query": query,
         "startTime": start_ms,
         "endTime": end_ms,
@@ -124,14 +145,14 @@ async def run_powerquery(query: str, from_date: str, to_date: str, max_count: in
     }
 
     # Use a generous read timeout for PowerQuery — large SDL scans can be slow.
-    pq_timeout = httpx.Timeout(connect=15.0, read=SDL_PQ_TIMEOUT, write=30.0, pool=15.0)
-    max_attempts = 2 + SDL_PQ_TIMEOUT_RETRIES  # base 2 (rate-limit) + timeout retries
+    pq_timeout = httpx.Timeout(connect=15.0, read=_active["SDL_PQ_TIMEOUT"], write=30.0, pool=15.0)
+    max_attempts = 2 + _active["SDL_PQ_TIMEOUT_RETRIES"]  # base 2 (rate-limit) + timeout retries
 
     async with httpx.AsyncClient(timeout=pq_timeout) as client:
         for attempt in range(max_attempts):
             try:
                 resp = await client.post(
-                    f"{SDL_XDR_URL}/api/powerQuery",
+                    f"{_active['SDL_XDR_URL']}/api/powerQuery",
                     json=payload,
                 )
                 resp.raise_for_status()
@@ -141,7 +162,7 @@ async def run_powerquery(query: str, from_date: str, to_date: str, max_count: in
                     await asyncio.sleep(5)
                     continue
                 raise RuntimeError(
-                    f"PowerQuery timed out after {SDL_PQ_TIMEOUT}s "
+                    f"PowerQuery timed out after {_active['SDL_PQ_TIMEOUT']}s "
                     f"(increase SDL_PQ_TIMEOUT in .env). Query: {query[:200]}"
                 )
             except httpx.HTTPStatusError as e:
@@ -186,7 +207,7 @@ def _sdl_config_headers() -> dict:
     POST /api/getFile, etc.). Falls back to SDL_LOG_READ_KEY if no dedicated
     Configuration Read key is set — that won't work for all endpoints, but lets
     callers fail with a meaningful 401 instead of crashing."""
-    key = SDL_CONFIG_READ_KEY or SDL_LOG_READ_KEY
+    key = _active["SDL_CONFIG_READ_KEY"] or _active["SDL_LOG_READ_KEY"]
     return {
         "Authorization": f"Bearer {key}",
         "Content-Type": "application/json",
@@ -203,7 +224,7 @@ async def list_sdl_parsers() -> list[str]:
     """
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
-            f"{SDL_XDR_URL}/api/listFiles",
+            f"{_active['SDL_XDR_URL']}/api/listFiles",
             headers=_sdl_config_headers(),
             json={"pathPrefix": "/logParsers/"},
         )
@@ -224,8 +245,8 @@ async def list_sdl_parsers_legacy() -> list[str]:
     """[Deprecated] Legacy management-console path — kept for reference but unused."""
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.get(
-            f"{BASE_URL}/api/v1/files/logParsers",
-            headers=HEADERS,
+            f"{_active['BASE_URL']}/api/v1/files/logParsers",
+            headers=_headers(),
         )
         resp.raise_for_status()
         data = resp.json()
@@ -244,7 +265,7 @@ async def get_sdl_parser(filename: str) -> dict:
     path = filename if filename.startswith("/logParsers/") else f"/logParsers/{filename}"
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
-            f"{SDL_XDR_URL}/api/getFile",
+            f"{_active['SDL_XDR_URL']}/api/getFile",
             headers=_sdl_config_headers(),
             json={"path": path},
         )
@@ -262,8 +283,8 @@ async def get_account_id() -> str | None:
     async with httpx.AsyncClient(timeout=15) as client:
         # Path 1: account-scoped token
         resp = await client.get(
-            f"{BASE_URL}/web/api/v2.1/accounts",
-            headers=HEADERS,
+            f"{_active['BASE_URL']}/web/api/v2.1/accounts",
+            headers=_headers(),
             params={"limit": 1},
         )
         if resp.status_code == 200:
@@ -273,8 +294,8 @@ async def get_account_id() -> str | None:
         # Path 2: site-scoped token — accountId is embedded in sites payload
         if resp.status_code in (401, 403):
             sresp = await client.get(
-                f"{BASE_URL}/web/api/v2.1/sites",
-                headers=HEADERS,
+                f"{_active['BASE_URL']}/web/api/v2.1/sites",
+                headers=_headers(),
                 params={"limit": 1},
             )
             if sresp.status_code == 200:
@@ -294,8 +315,8 @@ async def get_scope_for_platform_rules() -> tuple[str, str] | None:
     async with httpx.AsyncClient(timeout=15) as client:
         # Prefer account scope (broadest)
         a = await client.get(
-            f"{BASE_URL}/web/api/v2.1/accounts",
-            headers=HEADERS,
+            f"{_active['BASE_URL']}/web/api/v2.1/accounts",
+            headers=_headers(),
             params={"limit": 1},
         )
         if a.status_code == 200:
@@ -304,8 +325,8 @@ async def get_scope_for_platform_rules() -> tuple[str, str] | None:
                 return ("account", str(accounts[0]["id"]))
         # Fall back to site scope (site-scoped tokens land here)
         s = await client.get(
-            f"{BASE_URL}/web/api/v2.1/sites",
-            headers=HEADERS,
+            f"{_active['BASE_URL']}/web/api/v2.1/sites",
+            headers=_headers(),
             params={"limit": 1},
         )
         if s.status_code == 200:
@@ -340,8 +361,8 @@ async def get_platform_rules(page_size: int = 1000) -> list:
                 "cursor": cursor,
             }
             resp = await client.get(
-                f"{BASE_URL}/web/api/v2.1/detection-library/platform-rules",
-                headers=HEADERS,
+                f"{_active['BASE_URL']}/web/api/v2.1/detection-library/platform-rules",
+                headers=_headers(),
                 params=params,
             )
             if resp.status_code == 400:
@@ -358,8 +379,8 @@ async def get_platform_rules(page_size: int = 1000) -> list:
 async def get_sites() -> list:
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.get(
-            f"{BASE_URL}/web/api/v2.1/sites",
-            headers=HEADERS,
+            f"{_active['BASE_URL']}/web/api/v2.1/sites",
+            headers=_headers(),
             params={"limit": 100},
         )
         resp.raise_for_status()

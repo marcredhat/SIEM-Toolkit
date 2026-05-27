@@ -74,6 +74,20 @@ class CoverageSnapshot(Base):
     rules_fired = Column(Integer, default=0)
 
 
+class ConsoleConfig(Base):
+    __tablename__ = "console_configs"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, unique=True, index=True)
+    s1_base_url = Column(String)
+    s1_api_token = Column(Text)
+    sdl_xdr_url = Column(String)
+    sdl_log_read_key = Column(Text)
+    sdl_config_read_key = Column(Text, default="")
+    sdl_pq_timeout = Column(Integer, default=600)
+    is_active = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 def get_db():
     db = SessionLocal()
     try:

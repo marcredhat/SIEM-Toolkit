@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from db import engine, Base, get_db, ParsedRule, RuleFiringCache, CoverageSnapshot
-from routers import coverage, ingest, settings, quality, query
+from routers import coverage, ingest, settings, quality, query, consoles
 
 Base.metadata.create_all(bind=engine)
 
@@ -40,9 +40,46 @@ with engine.connect() as _conn:
         "rules_fired INTEGER DEFAULT 0"
         ")"
     ))
+    _conn.execute(text(
+        "CREATE TABLE IF NOT EXISTS console_configs ("
+        "id SERIAL PRIMARY KEY, "
+        "name VARCHAR UNIQUE, "
+        "s1_base_url VARCHAR, "
+        "s1_api_token TEXT, "
+        "sdl_xdr_url VARCHAR, "
+        "sdl_log_read_key TEXT, "
+        "sdl_config_read_key TEXT DEFAULT '', "
+        "sdl_pq_timeout INTEGER DEFAULT 600, "
+        "is_active BOOLEAN DEFAULT FALSE, "
+        "created_at TIMESTAMP"
+        ")"
+    ))
     _conn.commit()
 
 app = FastAPI(title="Parallax", version="1.0.0")
+
+
+@app.on_event("startup")
+async def restore_active_console():
+    """Restore active console credentials from DB after container restart."""
+    from db import ConsoleConfig
+    from services import s1_client
+    from sqlalchemy.orm import Session
+
+    db: Session = next(get_db())
+    try:
+        active = db.query(ConsoleConfig).filter_by(is_active=True).first()
+        if active:
+            s1_client.set_active_console({
+                "s1_base_url": active.s1_base_url,
+                "s1_api_token": active.s1_api_token,
+                "sdl_xdr_url": active.sdl_xdr_url,
+                "sdl_log_read_key": active.sdl_log_read_key,
+                "sdl_config_read_key": active.sdl_config_read_key,
+                "sdl_pq_timeout": active.sdl_pq_timeout,
+            })
+    finally:
+        db.close()
 
 
 @app.on_event("startup")
@@ -94,11 +131,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(coverage.router, prefix="/api/coverage", tags=["Coverage"])
-app.include_router(ingest.router,   prefix="/api/ingest",   tags=["Ingest"])
-app.include_router(settings.router, prefix="/api/settings", tags=["Settings"])
-app.include_router(quality.router,  prefix="/api/quality",  tags=["Quality"])
-app.include_router(query.router,    prefix="/api/query",    tags=["Query"])
+app.include_router(coverage.router,  prefix="/api/coverage",  tags=["Coverage"])
+app.include_router(ingest.router,    prefix="/api/ingest",    tags=["Ingest"])
+app.include_router(settings.router,  prefix="/api/settings",  tags=["Settings"])
+app.include_router(quality.router,   prefix="/api/quality",   tags=["Quality"])
+app.include_router(query.router,     prefix="/api/query",     tags=["Query"])
+app.include_router(consoles.router,  prefix="/api/consoles",  tags=["Consoles"])
 
 
 @app.get("/health")
